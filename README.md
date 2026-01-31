@@ -49,6 +49,18 @@ npm install @m1heng-clawd/feishu
 | `im:message:recall` | Recall | Recall sent messages |
 | `im:message.reactions:read` | Reactions | View message reactions |
 
+#### Document Tools Permissions
+
+Required if using Feishu document tools (`feishu_doc_*`):
+
+| Permission | Description |
+|------------|-------------|
+| `docx:document` | Create/edit documents |
+| `docx:document:readonly` | Read documents |
+| `docx:document.block:convert` | Markdown to blocks conversion (required for write/append) |
+| `drive:drive` | Upload images to documents |
+| `drive:drive:readonly` | List folders |
+
 #### Event Subscriptions ⚠️
 
 > **This is the most commonly missed configuration!** If the bot can send messages but cannot receive them, check this section.
@@ -116,6 +128,7 @@ channels:
 - Pairing flow for DM approval
 - User and group directory lookup
 - **Card render mode**: Optional markdown rendering with syntax highlighting
+- **Document tools**: Read, create, and write Feishu documents with markdown (tables not supported due to API limitations)
 - **@mention forwarding**: When you @mention someone in your message, the bot's reply will automatically @mention them too
 
 #### @Mention Forwarding
@@ -212,6 +225,18 @@ npm install @m1heng-clawd/feishu
 | `im:message:recall` | 撤回 | 撤回已发送消息 |
 | `im:message.reactions:read` | 表情 | 查看消息表情回复 |
 
+#### 文档工具权限
+
+使用飞书文档工具（`feishu_doc_*`）需要以下权限：
+
+| 权限 | 说明 |
+|------|------|
+| `docx:document` | 创建/编辑文档 |
+| `docx:document:readonly` | 读取文档 |
+| `docx:document.block:convert` | Markdown 转 blocks（write/append 必需） |
+| `drive:drive` | 上传图片到文档 |
+| `drive:drive:readonly` | 列出文件夹 |
+
 #### 事件订阅 ⚠️
 
 > **这是最容易遗漏的配置！** 如果机器人能发消息但收不到消息，请检查此项。
@@ -279,6 +304,7 @@ channels:
 - 私聊配对审批流程
 - 用户和群组目录查询
 - **卡片渲染模式**：支持语法高亮的 Markdown 渲染
+- **文档工具**：读取、创建、用 Markdown 写入飞书文档（表格因 API 限制不支持）
 - **@ 转发功能**：在消息中 @ 某人，机器人的回复会自动 @ 该用户
 
 #### @ 转发功能
