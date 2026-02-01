@@ -163,6 +163,7 @@ channels:
 - **Wiki tools**: Navigate knowledge bases, list spaces, get node details, search, create/move/rename nodes
 - **Drive tools**: List folders, get file info, create folders, move/delete files
 - **@mention forwarding**: When you @mention someone in your message, the bot's reply will automatically @mention them too
+- **Permission error notification**: When the bot encounters a Feishu API permission error, it automatically notifies the user with the permission grant URL
 
 #### @Mention Forwarding
 
@@ -372,6 +373,7 @@ channels:
 - **知识库工具**：浏览知识库、列出空间、获取节点详情、搜索、创建/移动/重命名节点
 - **云空间工具**：列出文件夹、获取文件信息、创建文件夹、移动/删除文件
 - **@ 转发功能**：在消息中 @ 某人，机器人的回复会自动 @ 该用户
+- **权限错误提示**：当机器人遇到飞书 API 权限错误时，会自动通知用户并提供权限授权链接
 
 #### @ 转发功能
 
