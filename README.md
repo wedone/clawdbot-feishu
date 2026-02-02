@@ -32,7 +32,6 @@ openclaw plugins update feishu
 
 | Permission | Scope | Description |
 |------------|-------|-------------|
-| `contact:user.base:readonly` | User info | Get basic user info (required to resolve sender display names for speaker attribution) |
 | `im:message` | Messaging | Send and receive messages |
 | `im:message.p2p_msg:readonly` | DM | Read direct messages to bot |
 | `im:message.group_at_msg:readonly` | Group | Receive @mention messages in groups |
@@ -43,6 +42,7 @@ openclaw plugins update feishu
 
 | Permission | Scope | Description |
 |------------|-------|-------------|
+| `contact:user.base:readonly` | User info | Get basic user info (required to resolve sender display names for speaker attribution) |
 | `im:message.group_msg` | Group | Read all group messages (sensitive) |
 | `im:message:readonly` | Read | Get message history |
 | `im:message:update` | Edit | Update/edit sent messages |
@@ -258,7 +258,6 @@ openclaw plugins update feishu
 
 | 权限 | 范围 | 说明 |
 |------|------|------|
-| `contact:user.base:readonly` | 用户信息 | 获取用户基本信息（用于解析发送者姓名，避免群聊/私聊把不同人当成同一说话者） |
 | `im:message` | 消息 | 发送和接收消息 |
 | `im:message.p2p_msg:readonly` | 私聊 | 读取发给机器人的私聊消息 |
 | `im:message.group_at_msg:readonly` | 群聊 | 接收群内 @机器人 的消息 |
@@ -269,6 +268,7 @@ openclaw plugins update feishu
 
 | 权限 | 范围 | 说明 |
 |------|------|------|
+| `contact:user.base:readonly` | 用户信息 | 获取用户基本信息（用于解析发送者姓名，避免群聊/私聊把不同人当成同一说话者） |
 | `im:message.group_msg` | 群聊 | 读取所有群消息（敏感） |
 | `im:message:readonly` | 读取 | 获取历史消息 |
 | `im:message:update` | 编辑 | 更新/编辑已发送消息 |
