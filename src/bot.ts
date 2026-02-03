@@ -51,7 +51,7 @@ function extractPermissionError(err: unknown): PermissionError | null {
 
   // Extract the grant URL from the error message (contains the direct link)
   const msg = feishuErr.msg ?? "";
-  const urlMatch = msg.match(/https:\/\/open\.feishu\.cn\/app\/[^\s,]+/);
+  const urlMatch = msg.match(/https:\/\/[^\s,]+\/app\/[^\s,]+/);
   const grantUrl = urlMatch?.[0];
 
   return {
