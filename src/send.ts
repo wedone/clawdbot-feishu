@@ -1,10 +1,11 @@
 import type { ClawdbotConfig } from "openclaw/plugin-sdk";
-import type { FeishuConfig, FeishuSendResult } from "./types.js";
+import type { FeishuSendResult, ResolvedFeishuAccount } from "./types.js";
 import type { MentionTarget } from "./mention.js";
 import { buildMentionedMessage, buildMentionedCardContent } from "./mention.js";
 import { createFeishuClient } from "./client.js";
 import { resolveReceiveIdType, normalizeFeishuTarget } from "./targets.js";
 import { getFeishuRuntime } from "./runtime.js";
+import { resolveFeishuAccount } from "./accounts.js";
 
 export type FeishuMessageInfo = {
   messageId: string;
@@ -23,14 +24,15 @@ export type FeishuMessageInfo = {
 export async function getMessageFeishu(params: {
   cfg: ClawdbotConfig;
   messageId: string;
+  accountId?: string;
 }): Promise<FeishuMessageInfo | null> {
-  const { cfg, messageId } = params;
-  const feishuCfg = cfg.channels?.feishu as FeishuConfig | undefined;
-  if (!feishuCfg) {
-    throw new Error("Feishu channel not configured");
+  const { cfg, messageId, accountId } = params;
+  const account = resolveFeishuAccount({ cfg, accountId });
+  if (!account.configured) {
+    throw new Error(`Feishu account "${account.accountId}" not configured`);
   }
 
-  const client = createFeishuClient(feishuCfg);
+  const client = createFeishuClient(account);
 
   try {
     const response = (await client.im.message.get({
@@ -95,6 +97,8 @@ export type SendFeishuMessageParams = {
   replyToMessageId?: string;
   /** Mention target users */
   mentions?: MentionTarget[];
+  /** Account ID (optional, uses default if not specified) */
+  accountId?: string;
 };
 
 function buildFeishuPostMessagePayload(params: { feishuCfg: FeishuConfig; messageText: string }): {
@@ -120,13 +124,13 @@ function buildFeishuPostMessagePayload(params: { feishuCfg: FeishuConfig; messag
 }
 
 export async function sendMessageFeishu(params: SendFeishuMessageParams): Promise<FeishuSendResult> {
-  const { cfg, to, text, replyToMessageId, mentions } = params;
-  const feishuCfg = cfg.channels?.feishu as FeishuConfig | undefined;
-  if (!feishuCfg) {
-    throw new Error("Feishu channel not configured");
+  const { cfg, to, text, replyToMessageId, mentions, accountId } = params;
+  const account = resolveFeishuAccount({ cfg, accountId });
+  if (!account.configured) {
+    throw new Error(`Feishu account "${account.accountId}" not configured`);
   }
 
-  const client = createFeishuClient(feishuCfg);
+  const client = createFeishuClient(account);
   const receiveId = normalizeFeishuTarget(to);
   if (!receiveId) {
     throw new Error(`Invalid Feishu target: ${to}`);
@@ -193,16 +197,17 @@ export type SendFeishuCardParams = {
   to: string;
   card: Record<string, unknown>;
   replyToMessageId?: string;
+  accountId?: string;
 };
 
 export async function sendCardFeishu(params: SendFeishuCardParams): Promise<FeishuSendResult> {
-  const { cfg, to, card, replyToMessageId } = params;
-  const feishuCfg = cfg.channels?.feishu as FeishuConfig | undefined;
-  if (!feishuCfg) {
-    throw new Error("Feishu channel not configured");
+  const { cfg, to, card, replyToMessageId, accountId } = params;
+  const account = resolveFeishuAccount({ cfg, accountId });
+  if (!account.configured) {
+    throw new Error(`Feishu account "${account.accountId}" not configured`);
   }
 
-  const client = createFeishuClient(feishuCfg);
+  const client = createFeishuClient(account);
   const receiveId = normalizeFeishuTarget(to);
   if (!receiveId) {
     throw new Error(`Invalid Feishu target: ${to}`);
@@ -253,14 +258,15 @@ export async function updateCardFeishu(params: {
   cfg: ClawdbotConfig;
   messageId: string;
   card: Record<string, unknown>;
+  accountId?: string;
 }): Promise<void> {
-  const { cfg, messageId, card } = params;
-  const feishuCfg = cfg.channels?.feishu as FeishuConfig | undefined;
-  if (!feishuCfg) {
-    throw new Error("Feishu channel not configured");
+  const { cfg, messageId, card, accountId } = params;
+  const account = resolveFeishuAccount({ cfg, accountId });
+  if (!account.configured) {
+    throw new Error(`Feishu account "${account.accountId}" not configured`);
   }
 
-  const client = createFeishuClient(feishuCfg);
+  const client = createFeishuClient(account);
   const content = JSON.stringify(card);
 
   const response = await client.im.message.patch({
@@ -302,15 +308,16 @@ export async function sendMarkdownCardFeishu(params: {
   replyToMessageId?: string;
   /** Mention target users */
   mentions?: MentionTarget[];
+  accountId?: string;
 }): Promise<FeishuSendResult> {
-  const { cfg, to, text, replyToMessageId, mentions } = params;
+  const { cfg, to, text, replyToMessageId, mentions, accountId } = params;
   // Build message content (with @mention support)
   let cardText = text;
   if (mentions && mentions.length > 0) {
     cardText = buildMentionedCardContent(mentions, text);
   }
   const card = buildMarkdownCard(cardText);
-  return sendCardFeishu({ cfg, to, card, replyToMessageId });
+  return sendCardFeishu({ cfg, to, card, replyToMessageId, accountId });
 }
 
 /**
@@ -321,14 +328,15 @@ export async function editMessageFeishu(params: {
   cfg: ClawdbotConfig;
   messageId: string;
   text: string;
+  accountId?: string;
 }): Promise<void> {
-  const { cfg, messageId, text } = params;
-  const feishuCfg = cfg.channels?.feishu as FeishuConfig | undefined;
-  if (!feishuCfg) {
-    throw new Error("Feishu channel not configured");
+  const { cfg, messageId, text, accountId } = params;
+  const account = resolveFeishuAccount({ cfg, accountId });
+  if (!account.configured) {
+    throw new Error(`Feishu account "${account.accountId}" not configured`);
   }
 
-  const client = createFeishuClient(feishuCfg);
+  const client = createFeishuClient(account);
   const tableMode = getFeishuRuntime().channel.text.resolveMarkdownTableMode({
     cfg,
     channel: "feishu",
