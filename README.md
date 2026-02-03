@@ -143,6 +143,8 @@ channels:
     domain: "feishu"
     # Connection mode: "websocket" (recommended) or "webhook"
     connectionMode: "websocket"
+    # Webhook path (default: "/feishu/events")
+    webhookPath: "/feishu/events"
     # DM policy: "pairing" | "open" | "allowlist"
     dmPolicy: "pairing"
     # Group policy: "open" | "allowlist" | "disabled"
@@ -369,6 +371,8 @@ channels:
     domain: "feishu"
     # 连接模式: "websocket" (推荐) 或 "webhook"
     connectionMode: "websocket"
+    # Webhook 路径 (默认: "/feishu/events")
+    webhookPath: "/feishu/events"
     # 私聊策略: "pairing" | "open" | "allowlist"
     dmPolicy: "pairing"
     # 群聊策略: "open" | "allowlist" | "disabled"
