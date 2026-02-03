@@ -139,8 +139,8 @@ channels:
     enabled: true
     appId: "cli_xxxxx"
     appSecret: "secret"
-    # Domain: "feishu" (China) or "lark" (International)
-    domain: "feishu"
+    # Domain: "feishu" (China), "lark" (International), or custom URL
+    domain: "feishu"  # or "https://open.xxx.cn" for private deployment
     # Connection mode: "websocket" (recommended) or "webhook"
     connectionMode: "websocket"
     # Webhook path (default: "/feishu/events")
@@ -367,8 +367,8 @@ channels:
     enabled: true
     appId: "cli_xxxxx"
     appSecret: "secret"
-    # 域名: "feishu" (国内) 或 "lark" (国际)
-    domain: "feishu"
+    # 域名: "feishu" (国内)、"lark" (国际) 或自定义 URL
+    domain: "feishu"  # 私有化部署可用 "https://open.xxx.cn"
     # 连接模式: "websocket" (推荐) 或 "webhook"
     connectionMode: "websocket"
     # Webhook 路径 (默认: "/feishu/events")
