@@ -2,6 +2,8 @@
 
 Feishu/Lark (飞书) channel plugin for [OpenClaw](https://github.com/openclaw/openclaw).
 
+> **中文社区资料** - 配置教程、常见问题、使用技巧：[Wiki](https://github.com/m1heng/clawdbot-feishu/wiki)
+
 [English](#english) | [中文](#中文)
 
 ---
