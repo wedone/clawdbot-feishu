@@ -1,6 +1,6 @@
 import type { ClawdbotConfig } from "openclaw/plugin-sdk";
-import type { FeishuConfig } from "./types.js";
 import { createFeishuClient } from "./client.js";
+import { resolveFeishuAccount } from "./accounts.js";
 import { resolveReceiveIdType, normalizeFeishuTarget } from "./targets.js";
 import fs from "fs";
 import path from "path";
@@ -25,14 +25,15 @@ export type DownloadMessageResourceResult = {
 export async function downloadImageFeishu(params: {
   cfg: ClawdbotConfig;
   imageKey: string;
+  accountId?: string;
 }): Promise<DownloadImageResult> {
-  const { cfg, imageKey } = params;
-  const feishuCfg = cfg.channels?.feishu as FeishuConfig | undefined;
-  if (!feishuCfg) {
-    throw new Error("Feishu channel not configured");
+  const { cfg, imageKey, accountId } = params;
+  const account = resolveFeishuAccount({ cfg, accountId });
+  if (!account.configured) {
+    throw new Error(`Feishu account "${account.accountId}" not configured`);
   }
 
-  const client = createFeishuClient(feishuCfg);
+  const client = createFeishuClient(account);
 
   const response = await client.im.image.get({
     path: { image_key: imageKey },
@@ -103,14 +104,15 @@ export async function downloadMessageResourceFeishu(params: {
   messageId: string;
   fileKey: string;
   type: "image" | "file";
+  accountId?: string;
 }): Promise<DownloadMessageResourceResult> {
-  const { cfg, messageId, fileKey, type } = params;
-  const feishuCfg = cfg.channels?.feishu as FeishuConfig | undefined;
-  if (!feishuCfg) {
-    throw new Error("Feishu channel not configured");
+  const { cfg, messageId, fileKey, type, accountId } = params;
+  const account = resolveFeishuAccount({ cfg, accountId });
+  if (!account.configured) {
+    throw new Error(`Feishu account "${account.accountId}" not configured`);
   }
 
-  const client = createFeishuClient(feishuCfg);
+  const client = createFeishuClient(account);
 
   const response = await client.im.messageResource.get({
     path: { message_id: messageId, file_key: fileKey },
@@ -196,14 +198,15 @@ export async function uploadImageFeishu(params: {
   cfg: ClawdbotConfig;
   image: Buffer | string; // Buffer or file path
   imageType?: "message" | "avatar";
+  accountId?: string;
 }): Promise<UploadImageResult> {
-  const { cfg, image, imageType = "message" } = params;
-  const feishuCfg = cfg.channels?.feishu as FeishuConfig | undefined;
-  if (!feishuCfg) {
-    throw new Error("Feishu channel not configured");
+  const { cfg, image, imageType = "message", accountId } = params;
+  const account = resolveFeishuAccount({ cfg, accountId });
+  if (!account.configured) {
+    throw new Error(`Feishu account "${account.accountId}" not configured`);
   }
 
-  const client = createFeishuClient(feishuCfg);
+  const client = createFeishuClient(account);
 
   // SDK expects a Readable stream, not a Buffer
   // Use type assertion since SDK actually accepts any Readable at runtime
@@ -242,14 +245,15 @@ export async function uploadFileFeishu(params: {
   fileName: string;
   fileType: "opus" | "mp4" | "pdf" | "doc" | "xls" | "ppt" | "stream";
   duration?: number; // Required for audio/video files, in milliseconds
+  accountId?: string;
 }): Promise<UploadFileResult> {
-  const { cfg, file, fileName, fileType, duration } = params;
-  const feishuCfg = cfg.channels?.feishu as FeishuConfig | undefined;
-  if (!feishuCfg) {
-    throw new Error("Feishu channel not configured");
+  const { cfg, file, fileName, fileType, duration, accountId } = params;
+  const account = resolveFeishuAccount({ cfg, accountId });
+  if (!account.configured) {
+    throw new Error(`Feishu account "${account.accountId}" not configured`);
   }
 
-  const client = createFeishuClient(feishuCfg);
+  const client = createFeishuClient(account);
 
   // SDK expects a Readable stream, not a Buffer
   // Use type assertion since SDK actually accepts any Readable at runtime
@@ -287,14 +291,15 @@ export async function sendImageFeishu(params: {
   to: string;
   imageKey: string;
   replyToMessageId?: string;
+  accountId?: string;
 }): Promise<SendMediaResult> {
-  const { cfg, to, imageKey, replyToMessageId } = params;
-  const feishuCfg = cfg.channels?.feishu as FeishuConfig | undefined;
-  if (!feishuCfg) {
-    throw new Error("Feishu channel not configured");
+  const { cfg, to, imageKey, replyToMessageId, accountId } = params;
+  const account = resolveFeishuAccount({ cfg, accountId });
+  if (!account.configured) {
+    throw new Error(`Feishu account "${account.accountId}" not configured`);
   }
 
-  const client = createFeishuClient(feishuCfg);
+  const client = createFeishuClient(account);
   const receiveId = normalizeFeishuTarget(to);
   if (!receiveId) {
     throw new Error(`Invalid Feishu target: ${to}`);
@@ -349,14 +354,15 @@ export async function sendFileFeishu(params: {
   to: string;
   fileKey: string;
   replyToMessageId?: string;
+  accountId?: string;
 }): Promise<SendMediaResult> {
-  const { cfg, to, fileKey, replyToMessageId } = params;
-  const feishuCfg = cfg.channels?.feishu as FeishuConfig | undefined;
-  if (!feishuCfg) {
-    throw new Error("Feishu channel not configured");
+  const { cfg, to, fileKey, replyToMessageId, accountId } = params;
+  const account = resolveFeishuAccount({ cfg, accountId });
+  if (!account.configured) {
+    throw new Error(`Feishu account "${account.accountId}" not configured`);
   }
 
-  const client = createFeishuClient(feishuCfg);
+  const client = createFeishuClient(account);
   const receiveId = normalizeFeishuTarget(to);
   if (!receiveId) {
     throw new Error(`Invalid Feishu target: ${to}`);
@@ -461,8 +467,9 @@ export async function sendMediaFeishu(params: {
   mediaBuffer?: Buffer;
   fileName?: string;
   replyToMessageId?: string;
+  accountId?: string;
 }): Promise<SendMediaResult> {
-  const { cfg, to, mediaUrl, mediaBuffer, fileName, replyToMessageId } = params;
+  const { cfg, to, mediaUrl, mediaBuffer, fileName, replyToMessageId, accountId } = params;
 
   let buffer: Buffer;
   let name: string;
@@ -500,8 +507,8 @@ export async function sendMediaFeishu(params: {
   const isImage = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".ico", ".tiff"].includes(ext);
 
   if (isImage) {
-    const { imageKey } = await uploadImageFeishu({ cfg, image: buffer });
-    return sendImageFeishu({ cfg, to, imageKey, replyToMessageId });
+    const { imageKey } = await uploadImageFeishu({ cfg, image: buffer, accountId });
+    return sendImageFeishu({ cfg, to, imageKey, replyToMessageId, accountId });
   } else {
     const fileType = detectFileType(name);
     const { fileKey } = await uploadFileFeishu({
@@ -509,7 +516,8 @@ export async function sendMediaFeishu(params: {
       file: buffer,
       fileName: name,
       fileType,
+      accountId,
     });
-    return sendFileFeishu({ cfg, to, fileKey, replyToMessageId });
+    return sendFileFeishu({ cfg, to, fileKey, replyToMessageId, accountId });
   }
 }

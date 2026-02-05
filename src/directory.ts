@@ -1,6 +1,6 @@
 import type { ClawdbotConfig } from "openclaw/plugin-sdk";
-import type { FeishuConfig } from "./types.js";
 import { createFeishuClient } from "./client.js";
+import { resolveFeishuAccount } from "./accounts.js";
 import { normalizeFeishuTarget } from "./targets.js";
 
 export type FeishuDirectoryPeer = {
@@ -19,8 +19,10 @@ export async function listFeishuDirectoryPeers(params: {
   cfg: ClawdbotConfig;
   query?: string;
   limit?: number;
+  accountId?: string;
 }): Promise<FeishuDirectoryPeer[]> {
-  const feishuCfg = params.cfg.channels?.feishu as FeishuConfig | undefined;
+  const account = resolveFeishuAccount({ cfg: params.cfg, accountId: params.accountId });
+  const feishuCfg = account.config;
   const q = params.query?.trim().toLowerCase() || "";
   const ids = new Set<string>();
 
@@ -47,8 +49,10 @@ export async function listFeishuDirectoryGroups(params: {
   cfg: ClawdbotConfig;
   query?: string;
   limit?: number;
+  accountId?: string;
 }): Promise<FeishuDirectoryGroup[]> {
-  const feishuCfg = params.cfg.channels?.feishu as FeishuConfig | undefined;
+  const account = resolveFeishuAccount({ cfg: params.cfg, accountId: params.accountId });
+  const feishuCfg = account.config;
   const q = params.query?.trim().toLowerCase() || "";
   const ids = new Set<string>();
 
@@ -74,14 +78,15 @@ export async function listFeishuDirectoryPeersLive(params: {
   cfg: ClawdbotConfig;
   query?: string;
   limit?: number;
+  accountId?: string;
 }): Promise<FeishuDirectoryPeer[]> {
-  const feishuCfg = params.cfg.channels?.feishu as FeishuConfig | undefined;
-  if (!feishuCfg?.appId || !feishuCfg?.appSecret) {
+  const account = resolveFeishuAccount({ cfg: params.cfg, accountId: params.accountId });
+  if (!account.configured) {
     return listFeishuDirectoryPeers(params);
   }
 
   try {
-    const client = createFeishuClient(feishuCfg);
+    const client = createFeishuClient(account);
     const peers: FeishuDirectoryPeer[] = [];
     const limit = params.limit ?? 50;
 
@@ -118,14 +123,15 @@ export async function listFeishuDirectoryGroupsLive(params: {
   cfg: ClawdbotConfig;
   query?: string;
   limit?: number;
+  accountId?: string;
 }): Promise<FeishuDirectoryGroup[]> {
-  const feishuCfg = params.cfg.channels?.feishu as FeishuConfig | undefined;
-  if (!feishuCfg?.appId || !feishuCfg?.appSecret) {
+  const account = resolveFeishuAccount({ cfg: params.cfg, accountId: params.accountId });
+  if (!account.configured) {
     return listFeishuDirectoryGroups(params);
   }
 
   try {
-    const client = createFeishuClient(feishuCfg);
+    const client = createFeishuClient(account);
     const groups: FeishuDirectoryGroup[] = [];
     const limit = params.limit ?? 50;
 
