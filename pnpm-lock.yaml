@@ -9,7 +9,7 @@ importers:
   .:
     dependencies:
       '@larksuiteoapi/node-sdk':
-        specifier: ^1.30.0
+        specifier: ^1.56.1
         version: 1.56.1
       '@sinclair/typebox':
         specifier: ^0.34.48

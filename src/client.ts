@@ -10,8 +10,10 @@ const clientCache = new Map<
   }
 >();
 
-function resolveDomain(domain: FeishuDomain | undefined) {
-  return domain === "lark" ? Lark.Domain.Lark : Lark.Domain.Feishu;
+function resolveDomain(domain: FeishuDomain | undefined): Lark.Domain | string {
+  if (domain === "lark") return Lark.Domain.Lark;
+  if (domain === "feishu" || !domain) return Lark.Domain.Feishu;
+  return domain.replace(/\/+$/, ""); // Custom URL for private deployment
 }
 
 /**

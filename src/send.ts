@@ -101,7 +101,7 @@ export type SendFeishuMessageParams = {
   accountId?: string;
 };
 
-function buildFeishuPostMessagePayload(params: { feishuCfg: FeishuConfig; messageText: string }): {
+function buildFeishuPostMessagePayload(params: { messageText: string }): {
   content: string;
   msgType: string;
 } {
@@ -149,10 +149,7 @@ export async function sendMessageFeishu(params: SendFeishuMessageParams): Promis
   }
   const messageText = getFeishuRuntime().channel.text.convertMarkdownTables(rawText, tableMode);
 
-  const { content, msgType } = buildFeishuPostMessagePayload({
-    feishuCfg,
-    messageText,
-  });
+  const { content, msgType } = buildFeishuPostMessagePayload({ messageText });
 
   if (replyToMessageId) {
     const response = await client.im.message.reply({
@@ -343,10 +340,7 @@ export async function editMessageFeishu(params: {
   });
   const messageText = getFeishuRuntime().channel.text.convertMarkdownTables(text ?? "", tableMode);
 
-  const { content, msgType } = buildFeishuPostMessagePayload({
-    feishuCfg,
-    messageText,
-  });
+  const { content, msgType } = buildFeishuPostMessagePayload({ messageText });
 
   const response = await client.im.message.update({
     path: { message_id: messageId },
