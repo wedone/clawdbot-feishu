@@ -167,6 +167,46 @@ channels:
 | `raw` | Always send replies as plain text. Markdown tables are converted to ASCII. |
 | `card` | Always send replies as interactive cards with full markdown rendering (syntax highlighting, tables, clickable links). |
 
+#### Dynamic Agent Creation (Multi-User Workspace Isolation)
+
+When enabled, each DM user automatically gets their own isolated agent instance with a dedicated workspace. This provides complete isolation including separate conversation history, memory (MEMORY.md), and workspace files.
+
+```yaml
+channels:
+  feishu:
+    dmPolicy: "open"
+    allowFrom: ["*"]
+    dynamicAgentCreation:
+      enabled: true
+      # Template for workspace directory ({userId} = OpenID, {agentId} = generated agent ID)
+      workspaceTemplate: "~/workspaces/feishu-{agentId}"
+      # Template for agent config directory
+      agentDirTemplate: "~/.openclaw/agents/{agentId}/agent"
+      # Optional: limit total number of dynamic agents
+      maxAgents: 100
+
+session:
+  # Also set dmScope for session isolation (conversation history)
+  dmScope: "per-peer"
+```
+
+| Option | Description |
+|--------|-------------|
+| `enabled` | Enable dynamic agent creation for DM users |
+| `workspaceTemplate` | Template for workspace path. Supports `{userId}` (OpenID) and `{agentId}` (= `feishu-{openId}`) |
+| `agentDirTemplate` | Template for agent directory path |
+| `maxAgents` | Optional limit on number of dynamic agents |
+
+**How it works:**
+1. When a new user sends a DM, the system creates a new agent entry in `openclaw.json`
+2. A binding is created to route that user's DM to their dedicated agent
+3. Workspace and agent directories are created automatically
+4. Subsequent messages from that user go to their isolated agent
+
+**Difference from `dmScope: "per-peer"`:**
+- `dmScope: "per-peer"` only isolates conversation history
+- `dynamicAgentCreation` provides full isolation (workspace, memory, identity, tools)
+
 ### Features
 
 - WebSocket and Webhook connection modes
@@ -184,6 +224,7 @@ channels:
 - **Bitable tools**: Read/write bitable (多维表格) records, supports both `/base/` and `/wiki/` URLs
 - **@mention forwarding**: When you @mention someone in your message, the bot's reply will automatically @mention them too
 - **Permission error notification**: When the bot encounters a Feishu API permission error, it automatically notifies the user with the permission grant URL
+- **Dynamic agent creation**: Each DM user can have their own isolated agent instance with dedicated workspace (optional)
 
 #### @Mention Forwarding
 
@@ -395,6 +436,46 @@ channels:
 | `raw` | 始终纯文本，表格转为 ASCII |
 | `card` | 始终使用卡片，支持语法高亮、表格、链接等 |
 
+#### 动态 Agent 创建（多用户 Workspace 隔离）
+
+启用后，每个私聊用户会自动获得独立的 agent 实例和专属 workspace。这提供完整的隔离，包括独立的对话历史、记忆（MEMORY.md）和工作区文件。
+
+```yaml
+channels:
+  feishu:
+    dmPolicy: "open"
+    allowFrom: ["*"]
+    dynamicAgentCreation:
+      enabled: true
+      # workspace 目录模板 ({userId} = OpenID, {agentId} = 生成的 agent ID)
+      workspaceTemplate: "~/workspaces/feishu-{agentId}"
+      # agent 配置目录模板
+      agentDirTemplate: "~/.openclaw/agents/{agentId}/agent"
+      # 可选：限制动态 agent 总数
+      maxAgents: 100
+
+session:
+  # 同时设置 dmScope 以隔离对话历史
+  dmScope: "per-peer"
+```
+
+| 选项 | 说明 |
+|------|------|
+| `enabled` | 是否为私聊用户启用动态 agent 创建 |
+| `workspaceTemplate` | workspace 路径模板，支持 `{userId}`（OpenID）和 `{agentId}`（= `feishu-{openId}`）|
+| `agentDirTemplate` | agent 目录路径模板 |
+| `maxAgents` | 可选，限制动态 agent 的最大数量 |
+
+**工作原理：**
+1. 当新用户发送私聊时，系统在 `openclaw.json` 中创建新的 agent 条目
+2. 创建 binding 将该用户的私聊路由到专属 agent
+3. 自动创建 workspace 和 agent 目录
+4. 该用户后续的消息都会路由到其隔离的 agent
+
+**与 `dmScope: "per-peer"` 的区别：**
+- `dmScope: "per-peer"` 仅隔离对话历史
+- `dynamicAgentCreation` 提供完整隔离（workspace、记忆、身份、工具）
+
 ### 功能
 
 - WebSocket 和 Webhook 连接模式
@@ -412,6 +493,7 @@ channels:
 - **多维表格工具**：读写多维表格记录，支持 `/base/` 和 `/wiki/` 两种链接格式
 - **@ 转发功能**：在消息中 @ 某人，机器人的回复会自动 @ 该用户
 - **权限错误提示**：当机器人遇到飞书 API 权限错误时，会自动通知用户并提供权限授权链接
+- **动态 Agent 创建**：每个私聊用户可拥有独立的 agent 实例和专属 workspace（可选）
 
 #### @ 转发功能
 

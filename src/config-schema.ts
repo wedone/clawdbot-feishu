@@ -54,6 +54,20 @@ const ChannelHeartbeatVisibilitySchema = z
   .optional();
 
 /**
+ * Dynamic agent creation configuration.
+ * When enabled, a new agent is created for each unique DM user.
+ */
+const DynamicAgentCreationSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    workspaceTemplate: z.string().optional(),
+    agentDirTemplate: z.string().optional(),
+    maxAgents: z.number().int().positive().optional(),
+  })
+  .strict()
+  .optional();
+
+/**
  * Feishu tools configuration.
  * Controls which tool categories are enabled.
  *
@@ -152,6 +166,8 @@ export const FeishuConfigSchema = z
     heartbeat: ChannelHeartbeatVisibilitySchema,
     renderMode: RenderModeSchema, // raw = plain text (default), card = interactive card with markdown
     tools: FeishuToolsConfigSchema,
+    // Dynamic agent creation for DM users
+    dynamicAgentCreation: DynamicAgentCreationSchema,
     // Multi-account configuration
     accounts: z.record(z.string(), FeishuAccountConfigSchema.optional()).optional(),
   })

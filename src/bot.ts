@@ -24,6 +24,8 @@ import {
   extractMessageBody,
   isMentionForwardRequest,
 } from "./mention.js";
+import { maybeCreateDynamicAgent } from "./dynamic-agent.js";
+import type { DynamicAgentCreationConfig } from "./types.js";
 
 // --- Permission error extraction ---
 // Extract permission grant URL from Feishu API error response.
@@ -624,7 +626,7 @@ export async function handleFeishuMessage(params: {
     const feishuFrom = `feishu:${ctx.senderOpenId}`;
     const feishuTo = isGroup ? `chat:${ctx.chatId}` : `user:${ctx.senderOpenId}`;
 
-    const route = core.channel.routing.resolveAgentRoute({
+    let route = core.channel.routing.resolveAgentRoute({
       cfg,
       channel: "feishu",
       accountId: account.accountId,
@@ -633,6 +635,34 @@ export async function handleFeishuMessage(params: {
         id: isGroup ? ctx.chatId : ctx.senderOpenId,
       },
     });
+
+    // Dynamic agent creation for DM users
+    // When enabled, creates a unique agent instance with its own workspace for each DM user.
+    let effectiveCfg = cfg;
+    if (!isGroup && route.matchedBy === "default") {
+      const dynamicCfg = feishuCfg?.dynamicAgentCreation as DynamicAgentCreationConfig | undefined;
+      if (dynamicCfg?.enabled) {
+        const runtime = getFeishuRuntime();
+        const result = await maybeCreateDynamicAgent({
+          cfg,
+          runtime,
+          senderOpenId: ctx.senderOpenId,
+          dynamicCfg,
+          log: (msg) => log(msg),
+        });
+        if (result.created) {
+          effectiveCfg = result.updatedCfg;
+          // Re-resolve route with updated config
+          route = core.channel.routing.resolveAgentRoute({
+            cfg: result.updatedCfg,
+            channel: "feishu",
+            accountId: account.accountId,
+            peer: { kind: "dm", id: ctx.senderOpenId },
+          });
+          log(`feishu[${account.accountId}]: dynamic agent created, new route: ${route.sessionKey}`);
+        }
+      }
+    }
 
     const preview = ctx.content.replace(/\s+/g, " ").slice(0, 160);
     const inboundLabel = isGroup
