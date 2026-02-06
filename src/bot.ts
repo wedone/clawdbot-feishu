@@ -626,13 +626,27 @@ export async function handleFeishuMessage(params: {
     const feishuFrom = `feishu:${ctx.senderOpenId}`;
     const feishuTo = isGroup ? `chat:${ctx.chatId}` : `user:${ctx.senderOpenId}`;
 
+    // Resolve peer ID for session routing
+    // When topicSessionMode is enabled, messages within a topic (identified by root_id)
+    // get a separate session from the main group chat.
+    let peerId = isGroup ? ctx.chatId : ctx.senderOpenId;
+    if (isGroup && ctx.rootId) {
+      const groupConfig = resolveFeishuGroupConfig({ cfg: feishuCfg, groupId: ctx.chatId });
+      const topicSessionMode = groupConfig?.topicSessionMode ?? feishuCfg?.topicSessionMode ?? "disabled";
+      if (topicSessionMode === "enabled") {
+        // Use chatId:topic:rootId as peer ID for topic-scoped sessions
+        peerId = `${ctx.chatId}:topic:${ctx.rootId}`;
+        log(`feishu[${account.accountId}]: topic session isolation enabled, peer=${peerId}`);
+      }
+    }
+
     let route = core.channel.routing.resolveAgentRoute({
       cfg,
       channel: "feishu",
       accountId: account.accountId,
       peer: {
         kind: isGroup ? "group" : "dm",
-        id: isGroup ? ctx.chatId : ctx.senderOpenId,
+        id: peerId,
       },
     });
 
