@@ -86,6 +86,16 @@ const FeishuToolsConfigSchema = z
   .strict()
   .optional();
 
+/**
+ * Topic session isolation mode for group chats.
+ * - "disabled" (default): All messages in a group share one session
+ * - "enabled": Messages in different topics get separate sessions
+ *
+ * When enabled, the session key becomes `chat:{chatId}:topic:{rootId}`
+ * for messages within a topic thread, allowing isolated conversations.
+ */
+const TopicSessionModeSchema = z.enum(["disabled", "enabled"]).optional();
+
 export const FeishuGroupSchema = z
   .object({
     requireMention: z.boolean().optional(),
@@ -94,6 +104,7 @@ export const FeishuGroupSchema = z
     enabled: z.boolean().optional(),
     allowFrom: z.array(z.union([z.string(), z.number()])).optional(),
     systemPrompt: z.string().optional(),
+    topicSessionMode: TopicSessionModeSchema,
   })
   .strict();
 
@@ -156,6 +167,7 @@ export const FeishuConfigSchema = z
     groupAllowFrom: z.array(z.union([z.string(), z.number()])).optional(),
     requireMention: z.boolean().optional().default(true),
     groups: z.record(z.string(), FeishuGroupSchema.optional()).optional(),
+    topicSessionMode: TopicSessionModeSchema,
     historyLimit: z.number().int().min(0).optional(),
     dmHistoryLimit: z.number().int().min(0).optional(),
     dms: z.record(z.string(), DmConfigSchema).optional(),

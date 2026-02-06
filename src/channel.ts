@@ -91,6 +91,7 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount> = {
         groupPolicy: { type: "string", enum: ["open", "allowlist", "disabled"] },
         groupAllowFrom: { type: "array", items: { oneOf: [{ type: "string" }, { type: "number" }] } },
         requireMention: { type: "boolean" },
+        topicSessionMode: { type: "string", enum: ["disabled", "enabled"] },
         historyLimit: { type: "integer", minimum: 0 },
         dmHistoryLimit: { type: "integer", minimum: 0 },
         textChunkLimit: { type: "integer", minimum: 1 },
