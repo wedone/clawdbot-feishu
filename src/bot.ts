@@ -24,28 +24,35 @@ import {
   isMentionForwardRequest,
 } from "./mention.js";
 
-// --- 消息去重机制 ---
-// 防止 WebSocket 重连或飞书重发消息时重复处理同一条消息
-// 使用 6 小时 TTL，覆盖大部分延迟重发的场景
-const MESSAGE_DEDUP_TTL_MS = 6 * 60 * 60 * 1000; // 6 小时
+// --- Message deduplication ---
+// Prevent duplicate processing when WebSocket reconnects or Feishu redelivers messages.
+const DEDUP_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const DEDUP_MAX_SIZE = 10_000;
+const DEDUP_CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // cleanup every 5 minutes
 const processedMessageIds = new Map<string, number>(); // messageId -> timestamp
+let lastCleanupTime = Date.now();
 
-function isMessageAlreadyProcessed(messageId: string): boolean {
+function tryRecordMessage(messageId: string): boolean {
   const now = Date.now();
-  
-  // 清理过期条目
-  for (const [id, timestamp] of processedMessageIds) {
-    if (now - timestamp > MESSAGE_DEDUP_TTL_MS) {
-      processedMessageIds.delete(id);
+
+  // Throttled cleanup: evict expired entries at most once per interval
+  if (now - lastCleanupTime > DEDUP_CLEANUP_INTERVAL_MS) {
+    for (const [id, ts] of processedMessageIds) {
+      if (now - ts > DEDUP_TTL_MS) processedMessageIds.delete(id);
     }
+    lastCleanupTime = now;
   }
-  
-  if (processedMessageIds.has(messageId)) {
-    return true;
+
+  if (processedMessageIds.has(messageId)) return false;
+
+  // Evict oldest entries if cache is full
+  if (processedMessageIds.size >= DEDUP_MAX_SIZE) {
+    const first = processedMessageIds.keys().next().value!;
+    processedMessageIds.delete(first);
   }
-  
+
   processedMessageIds.set(messageId, now);
-  return false;
+  return true;
 }
 
 // --- Permission error extraction ---
@@ -521,10 +528,10 @@ export async function handleFeishuMessage(params: {
   const log = runtime?.log ?? console.log;
   const error = runtime?.error ?? console.error;
 
-  // --- 消息去重检查 ---
+  // Dedup check: skip if this message was already processed
   const messageId = event.message.message_id;
-  if (isMessageAlreadyProcessed(messageId)) {
-    log(`feishu: 跳过重复消息 ${messageId}`);
+  if (!tryRecordMessage(messageId)) {
+    log(`feishu: skipping duplicate message ${messageId}`);
     return;
   }
 
