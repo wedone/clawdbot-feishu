@@ -29,7 +29,7 @@ const meta = {
   blurb: "飞书/Lark enterprise messaging.",
   aliases: ["lark"],
   order: 70,
-} as const;
+};
 
 export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount> = {
   id: "feishu",
@@ -39,12 +39,11 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount> = {
   pairing: {
     idLabel: "feishuUserId",
     normalizeAllowEntry: (entry) => entry.replace(/^(feishu|user|open_id):/i, ""),
-    notifyApproval: async ({ cfg, id, accountId }) => {
+    notifyApproval: async ({ cfg, id }) => {
       await sendMessageFeishu({
         cfg,
         to: id,
         text: PAIRING_APPROVED_MESSAGE,
-        accountId,
       });
     },
   },
@@ -201,7 +200,7 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount> = {
     }),
     resolveAllowFrom: ({ cfg, accountId }) => {
       const account = resolveFeishuAccount({ cfg, accountId });
-      return account.config?.allowFrom ?? [];
+      return (account.config?.allowFrom ?? []).map((entry) => String(entry).trim()).filter(Boolean);
     },
     formatAllowFrom: ({ allowFrom }) =>
       allowFrom
@@ -297,8 +296,7 @@ export const feishuPlugin: ChannelPlugin<ResolvedFeishuAccount> = {
       probe: snapshot.probe,
       lastProbeAt: snapshot.lastProbeAt ?? null,
     }),
-    probeAccount: async ({ cfg, accountId }) => {
-      const account = resolveFeishuAccount({ cfg, accountId });
+    probeAccount: async ({ account }) => {
       return await probeFeishu(account);
     },
     buildAccountSnapshot: ({ account, runtime, probe }) => ({

@@ -87,15 +87,14 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
     },
   });
 
-  const textChunkLimit = core.channel.text.resolveTextChunkLimit({
-    cfg,
-    channel: "feishu",
-    defaultLimit: 4000,
+  const textChunkLimit = core.channel.text.resolveTextChunkLimit(cfg, "feishu", account.accountId, {
+    fallbackLimit: 4000,
   });
-  const chunkMode = core.channel.text.resolveChunkMode(cfg, "feishu");
+  const chunkMode = core.channel.text.resolveChunkMode(cfg, "feishu", account.accountId);
   const tableMode = core.channel.text.resolveMarkdownTableMode({
     cfg,
     channel: "feishu",
+    accountId: account.accountId,
   });
 
   const { dispatcher, replyOptions, markDispatchIdle } =
