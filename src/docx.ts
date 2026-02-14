@@ -1,11 +1,9 @@
 import { Type } from "@sinclair/typebox";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import { createFeishuClient } from "./client.js";
-import { resolveFeishuAccount, listEnabledFeishuAccounts } from "./accounts.js";
 import type * as Lark from "@larksuiteoapi/node-sdk";
 import { Readable } from "stream";
 import { FeishuDocSchema, type FeishuDocParams } from "./doc-schema.js";
-import { resolveToolsConfig } from "./tools-config.js";
+import { hasFeishuToolEnabledForAnyAccount, withFeishuToolClient } from "./tools-common/tool-exec.js";
 
 // ============ Helpers ============
 
@@ -762,23 +760,18 @@ export function registerFeishuDocTools(api: OpenClawPluginApi) {
     return;
   }
 
-  // Check if any account is configured
-  const accounts = listEnabledFeishuAccounts(api.config);
-  if (accounts.length === 0) {
+  if (!hasFeishuToolEnabledForAnyAccount(api.config)) {
     api.logger.debug?.("feishu_doc: No Feishu accounts configured, skipping doc tools");
     return;
   }
 
-  // Use first account's config for tools configuration
-  const firstAccount = accounts[0];
-  const toolsCfg = resolveToolsConfig(firstAccount.config.tools);
-  
-  // Helper to get client for the default account
-  const getClient = () => createFeishuClient(firstAccount);
+  // Registration happens once; account selection happens per execute() call.
+  const docEnabled = hasFeishuToolEnabledForAnyAccount(api.config, "doc");
+  const scopesEnabled = hasFeishuToolEnabledForAnyAccount(api.config, "scopes");
   const registered: string[] = [];
 
   // Main document tool with action-based dispatch
-  if (toolsCfg.doc) {
+  if (docEnabled) {
     api.registerTool(
     {
       name: "feishu_doc",
@@ -789,27 +782,33 @@ export function registerFeishuDocTools(api: OpenClawPluginApi) {
       async execute(_toolCallId, params) {
         const p = params as FeishuDocParams;
         try {
-          const client = getClient();
-          switch (p.action) {
-            case "read":
-              return json(await readDoc(client, p.doc_token));
-            case "write":
-              return json(await writeDoc(client, p.doc_token, p.content));
-            case "append":
-              return json(await appendDoc(client, p.doc_token, p.content));
-            case "create":
-              return json(await createDoc(client, p.title, p.folder_token));
-            case "list_blocks":
-              return json(await listBlocks(client, p.doc_token));
-            case "get_block":
-              return json(await getBlock(client, p.doc_token, p.block_id));
-            case "update_block":
-              return json(await updateBlock(client, p.doc_token, p.block_id, p.content));
-            case "delete_block":
-              return json(await deleteBlock(client, p.doc_token, p.block_id));
-            default:
-              return json({ error: `Unknown action: ${(p as any).action}` });
-          }
+          return await withFeishuToolClient({
+            api,
+            toolName: "feishu_doc",
+            requiredTool: "doc",
+            run: async ({ client }) => {
+              switch (p.action) {
+                case "read":
+                  return json(await readDoc(client, p.doc_token));
+                case "write":
+                  return json(await writeDoc(client, p.doc_token, p.content));
+                case "append":
+                  return json(await appendDoc(client, p.doc_token, p.content));
+                case "create":
+                  return json(await createDoc(client, p.title, p.folder_token));
+                case "list_blocks":
+                  return json(await listBlocks(client, p.doc_token));
+                case "get_block":
+                  return json(await getBlock(client, p.doc_token, p.block_id));
+                case "update_block":
+                  return json(await updateBlock(client, p.doc_token, p.block_id, p.content));
+                case "delete_block":
+                  return json(await deleteBlock(client, p.doc_token, p.block_id));
+                default:
+                  return json({ error: `Unknown action: ${(p as any).action}` });
+              }
+            },
+          });
         } catch (err) {
           return json({ error: err instanceof Error ? err.message : String(err) });
         }
@@ -821,7 +820,7 @@ export function registerFeishuDocTools(api: OpenClawPluginApi) {
   }
 
   // Keep feishu_app_scopes as independent tool
-  if (toolsCfg.scopes) {
+  if (scopesEnabled) {
     api.registerTool(
     {
       name: "feishu_app_scopes",
@@ -831,7 +830,12 @@ export function registerFeishuDocTools(api: OpenClawPluginApi) {
       parameters: Type.Object({}),
       async execute() {
         try {
-          const result = await listAppScopes(getClient());
+          const result = await withFeishuToolClient({
+            api,
+            toolName: "feishu_app_scopes",
+            requiredTool: "scopes",
+            run: async ({ client }) => listAppScopes(client),
+          });
           return json(result);
         } catch (err) {
           return json({ error: err instanceof Error ? err.message : String(err) });
@@ -844,6 +848,6 @@ export function registerFeishuDocTools(api: OpenClawPluginApi) {
   }
 
   if (registered.length > 0) {
-    api.logger.info?.(`feishu_doc: Registered ${registered.join(", ")}`);
+    api.logger.debug?.(`feishu_doc: Registered ${registered.join(", ")}`);
   }
 }

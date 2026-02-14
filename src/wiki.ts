@@ -1,9 +1,7 @@
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import { createFeishuClient } from "./client.js";
-import { listEnabledFeishuAccounts } from "./accounts.js";
 import type * as Lark from "@larksuiteoapi/node-sdk";
 import { FeishuWikiSchema, type FeishuWikiParams } from "./wiki-schema.js";
-import { resolveToolsConfig } from "./tools-config.js";
+import { hasFeishuToolEnabledForAnyAccount, withFeishuToolClient } from "./tools-common/tool-exec.js";
 
 // ============ Helpers ============
 
@@ -155,20 +153,15 @@ export function registerFeishuWikiTools(api: OpenClawPluginApi) {
     return;
   }
 
-  const accounts = listEnabledFeishuAccounts(api.config);
-  if (accounts.length === 0) {
+  if (!hasFeishuToolEnabledForAnyAccount(api.config)) {
     api.logger.debug?.("feishu_wiki: No Feishu accounts configured, skipping wiki tools");
     return;
   }
 
-  const firstAccount = accounts[0];
-  const toolsCfg = resolveToolsConfig(firstAccount.config.tools);
-  if (!toolsCfg.wiki) {
+  if (!hasFeishuToolEnabledForAnyAccount(api.config, "wiki")) {
     api.logger.debug?.("feishu_wiki: wiki tool disabled in config");
     return;
   }
-
-  const getClient = () => createFeishuClient(firstAccount);
 
   api.registerTool(
     {
@@ -180,38 +173,44 @@ export function registerFeishuWikiTools(api: OpenClawPluginApi) {
       async execute(_toolCallId, params) {
         const p = params as FeishuWikiParams;
         try {
-          const client = getClient();
-          switch (p.action) {
-            case "spaces":
-              return json(await listSpaces(client));
-            case "nodes":
-              return json(await listNodes(client, p.space_id, p.parent_node_token));
-            case "get":
-              return json(await getNode(client, p.token));
-            case "search":
-              return json({
-                error:
-                  "Search is not available. Use feishu_wiki with action: 'nodes' to browse or action: 'get' to lookup by token.",
-              });
-            case "create":
-              return json(
-                await createNode(client, p.space_id, p.title, p.obj_type, p.parent_node_token),
-              );
-            case "move":
-              return json(
-                await moveNode(
-                  client,
-                  p.space_id,
-                  p.node_token,
-                  p.target_space_id,
-                  p.target_parent_token,
-                ),
-              );
-            case "rename":
-              return json(await renameNode(client, p.space_id, p.node_token, p.title));
-            default:
-              return json({ error: `Unknown action: ${(p as any).action}` });
-          }
+          return await withFeishuToolClient({
+            api,
+            toolName: "feishu_wiki",
+            requiredTool: "wiki",
+            run: async ({ client }) => {
+              switch (p.action) {
+                case "spaces":
+                  return json(await listSpaces(client));
+                case "nodes":
+                  return json(await listNodes(client, p.space_id, p.parent_node_token));
+                case "get":
+                  return json(await getNode(client, p.token));
+                case "search":
+                  return json({
+                    error:
+                      "Search is not available. Use feishu_wiki with action: 'nodes' to browse or action: 'get' to lookup by token.",
+                  });
+                case "create":
+                  return json(
+                    await createNode(client, p.space_id, p.title, p.obj_type, p.parent_node_token),
+                  );
+                case "move":
+                  return json(
+                    await moveNode(
+                      client,
+                      p.space_id,
+                      p.node_token,
+                      p.target_space_id,
+                      p.target_parent_token,
+                    ),
+                  );
+                case "rename":
+                  return json(await renameNode(client, p.space_id, p.node_token, p.title));
+                default:
+                  return json({ error: `Unknown action: ${(p as any).action}` });
+              }
+            },
+          });
         } catch (err) {
           return json({ error: err instanceof Error ? err.message : String(err) });
         }
@@ -220,5 +219,5 @@ export function registerFeishuWikiTools(api: OpenClawPluginApi) {
     { name: "feishu_wiki" },
   );
 
-  api.logger.info?.(`feishu_wiki: Registered feishu_wiki tool`);
+  api.logger.debug?.("feishu_wiki: Registered feishu_wiki tool");
 }

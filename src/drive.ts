@@ -1,9 +1,7 @@
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import { createFeishuClient } from "./client.js";
-import { listEnabledFeishuAccounts } from "./accounts.js";
 import type * as Lark from "@larksuiteoapi/node-sdk";
 import { FeishuDriveSchema, type FeishuDriveParams } from "./drive-schema.js";
-import { resolveToolsConfig } from "./tools-config.js";
+import { hasFeishuToolEnabledForAnyAccount, withFeishuToolClient } from "./tools-common/tool-exec.js";
 import { writeDoc } from "./docx.js";
 
 // ============ Helpers ============
@@ -200,20 +198,15 @@ export function registerFeishuDriveTools(api: OpenClawPluginApi) {
     return;
   }
 
-  const accounts = listEnabledFeishuAccounts(api.config);
-  if (accounts.length === 0) {
+  if (!hasFeishuToolEnabledForAnyAccount(api.config)) {
     api.logger.debug?.("feishu_drive: No Feishu accounts configured, skipping drive tools");
     return;
   }
 
-  const firstAccount = accounts[0];
-  const toolsCfg = resolveToolsConfig(firstAccount.config.tools);
-  if (!toolsCfg.drive) {
+  if (!hasFeishuToolEnabledForAnyAccount(api.config, "drive")) {
     api.logger.debug?.("feishu_drive: drive tool disabled in config");
     return;
   }
-
-  const getClient = () => createFeishuClient(firstAccount);
 
   api.registerTool(
     {
@@ -225,23 +218,37 @@ export function registerFeishuDriveTools(api: OpenClawPluginApi) {
       async execute(_toolCallId, params) {
         const p = params as FeishuDriveParams;
         try {
-          const client = getClient();
-          switch (p.action) {
-            case "list":
-              return json(await listFolder(client, p.folder_token));
-            case "info":
-              return json(await getFileInfo(client, p.file_token));
-            case "create_folder":
-              return json(await createFolder(client, p.name, p.folder_token));
-            case "move":
-              return json(await moveFile(client, p.file_token, p.type, p.folder_token));
-            case "delete":
-              return json(await deleteFile(client, p.file_token, p.type));
-            case "import_document":
-              return json(await importDocument(client, p.title, p.content, p.folder_token, (p as any).doc_type || "docx"));
-            default:
-              return json({ error: `Unknown action: ${(p as any).action}` });
-          }
+          return await withFeishuToolClient({
+            api,
+            toolName: "feishu_drive",
+            requiredTool: "drive",
+            run: async ({ client }) => {
+              switch (p.action) {
+                case "list":
+                  return json(await listFolder(client, p.folder_token));
+                case "info":
+                  return json(await getFileInfo(client, p.file_token));
+                case "create_folder":
+                  return json(await createFolder(client, p.name, p.folder_token));
+                case "move":
+                  return json(await moveFile(client, p.file_token, p.type, p.folder_token));
+                case "delete":
+                  return json(await deleteFile(client, p.file_token, p.type));
+                case "import_document":
+                  return json(
+                    await importDocument(
+                      client,
+                      p.title,
+                      p.content,
+                      p.folder_token,
+                      (p as any).doc_type || "docx",
+                    ),
+                  );
+                default:
+                  return json({ error: `Unknown action: ${(p as any).action}` });
+              }
+            },
+          });
         } catch (err) {
           return json({ error: err instanceof Error ? err.message : String(err) });
         }
@@ -250,5 +257,5 @@ export function registerFeishuDriveTools(api: OpenClawPluginApi) {
     { name: "feishu_drive" },
   );
 
-  api.logger.info?.(`feishu_drive: Registered feishu_drive tool`);
+  api.logger.debug?.("feishu_drive: Registered feishu_drive tool");
 }

@@ -25,6 +25,7 @@ import {
   isMentionForwardRequest,
 } from "./mention.js";
 import { maybeCreateDynamicAgent } from "./dynamic-agent.js";
+import { runWithFeishuToolContext } from "./tools-common/tool-context.js";
 import type { DynamicAgentCreationConfig } from "./types.js";
 
 // --- Message deduplication ---
@@ -840,12 +841,21 @@ export async function handleFeishuMessage(params: {
 
       log(`feishu[${account.accountId}]: dispatching permission error notification to agent`);
 
-      await core.channel.reply.dispatchReplyFromConfig({
-        ctx: permissionCtx,
-        cfg,
-        dispatcher: permDispatcher,
-        replyOptions: permReplyOptions,
-      });
+      await runWithFeishuToolContext(
+        {
+          channel: "feishu",
+          accountId: account.accountId,
+          sessionKey: route.sessionKey,
+        },
+        // Keep account context available while the agent executes plugin tools.
+        () =>
+          core.channel.reply.dispatchReplyFromConfig({
+            ctx: permissionCtx,
+            cfg,
+            dispatcher: permDispatcher,
+            replyOptions: permReplyOptions,
+          }),
+      );
 
       markPermIdle();
     }
@@ -914,12 +924,21 @@ export async function handleFeishuMessage(params: {
 
     log(`feishu[${account.accountId}]: dispatching to agent (session=${route.sessionKey})`);
 
-    const { queuedFinal, counts } = await core.channel.reply.dispatchReplyFromConfig({
-      ctx: ctxPayload,
-      cfg,
-      dispatcher,
-      replyOptions,
-    });
+    const { queuedFinal, counts } = await runWithFeishuToolContext(
+      {
+        channel: "feishu",
+        accountId: account.accountId,
+        sessionKey: route.sessionKey,
+      },
+      // Tool calls produced by this turn should resolve to the same inbound account.
+      () =>
+        core.channel.reply.dispatchReplyFromConfig({
+          ctx: ctxPayload,
+          cfg,
+          dispatcher,
+          replyOptions,
+        }),
+    );
 
     markDispatchIdle();
 
