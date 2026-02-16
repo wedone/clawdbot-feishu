@@ -2,7 +2,7 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type * as Lark from "@larksuiteoapi/node-sdk";
 import { FeishuDriveSchema, type FeishuDriveParams } from "./drive-schema.js";
 import { hasFeishuToolEnabledForAnyAccount, withFeishuToolClient } from "./tools-common/tool-exec.js";
-import { writeDoc } from "./docx.js";
+import { createAndWriteDoc } from "./doc-write-service.js";
 
 // ============ Helpers ============
 
@@ -161,34 +161,7 @@ async function importDocument(
   folderToken?: string,
   _docType?: "docx" | "doc",
 ) {
-  // Step 1: Create empty document
-  const createRes = await client.docx.document.create({
-    data: { title, folder_token: folderToken },
-  });
-  
-  if (createRes.code !== 0) {
-    throw new Error(`Failed to create document: ${createRes.msg}`);
-  }
-
-  const docId = createRes.data?.document?.document_id;
-  if (!docId) {
-    throw new Error("Document created but no document_id returned");
-  }
-
-  // Step 2: Write markdown content to the document
-  // This ensures proper structure preservation using the writeDoc function
-  const writeResult = await writeDoc(client, docId, content, mediaMaxBytes);
-
-  return {
-    success: true,
-    document_id: docId,
-    title: title,
-    url: `https://feishu.cn/docx/${docId}`,
-    import_method: "create_and_write",
-    blocks_added: writeResult.blocks_added,
-    images_processed: writeResult.images_processed,
-    ...("warning" in writeResult && { warning: writeResult.warning }),
-  };
+  return createAndWriteDoc(client, title, content, mediaMaxBytes, folderToken);
 }
 
 // ============ Tool Registration ============

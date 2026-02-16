@@ -83,7 +83,7 @@ openclaw plugins update feishu
 | Permission | Tool | Description |
 |------------|------|-------------|
 | `docx:document` | `feishu_doc` | Create/edit documents |
-| `docx:document.block:convert` | `feishu_doc` | Markdown to blocks conversion (required for write/append) |
+| `docx:document.block:convert` | `feishu_doc` | Markdown to blocks conversion (required for write/append/create_and_write; also used by `feishu_drive.import_document`) |
 | `drive:drive` | `feishu_doc`, `feishu_drive` | Upload images to documents, create folders, move/delete files |
 | `wiki:wiki` | `feishu_wiki` | Create/move/rename wiki nodes |
 | `bitable:app` | `feishu_bitable` | Create/update/delete bitable records and manage fields |
@@ -276,7 +276,7 @@ session:
 - Pairing flow for DM approval
 - User and group directory lookup
 - **Card render mode**: Optional markdown rendering with syntax highlighting
-- **Document tools**: Read, create, and write Feishu documents with markdown (tables not supported due to API limitations)
+- **Document tools**: Read, create, and write Feishu documents with markdown, including atomic `create_and_write` / `import_document` flows for reliable create+content write
 - **Wiki tools**: Navigate knowledge bases, list spaces, get node details, search, create/move/rename nodes
 - **Drive tools**: List folders, get file info, create folders, move/delete files
 - **Bitable tools**: Manage bitable (多维表格) fields and records (read/create/update/delete), supports both `/base/` and `/wiki/` URLs
@@ -400,7 +400,7 @@ openclaw plugins update feishu
 | 权限 | 工具 | 说明 |
 |------|------|------|
 | `docx:document` | `feishu_doc` | 创建/编辑文档 |
-| `docx:document.block:convert` | `feishu_doc` | Markdown 转 blocks（write/append 必需） |
+| `docx:document.block:convert` | `feishu_doc` | Markdown 转 blocks（write/append/create_and_write 必需，`feishu_drive.import_document` 也会用到） |
 | `drive:drive` | `feishu_doc`, `feishu_drive` | 上传图片到文档、创建文件夹、移动/删除文件 |
 | `wiki:wiki` | `feishu_wiki` | 创建/移动/重命名知识库节点 |
 | `bitable:app` | `feishu_bitable` | 创建/更新/删除多维表格记录并管理字段 |

@@ -32,6 +32,28 @@ Replaces entire document with markdown content. Supports: headings, lists, code 
 
 **Limitation:** Markdown tables are NOT supported.
 
+### Create + Write (Atomic, Recommended)
+
+```json
+{
+  "action": "create_and_write",
+  "title": "New Document",
+  "content": "# Title\n\nMarkdown content..."
+}
+```
+
+With folder:
+```json
+{
+  "action": "create_and_write",
+  "title": "New Document",
+  "content": "# Title\n\nMarkdown content...",
+  "folder_token": "fldcnXXX"
+}
+```
+
+Creates the document and writes content in one call. Prefer this over separate `create` + `write`.
+
 ### Append Content
 
 ```json
@@ -50,6 +72,8 @@ With folder:
 ```json
 { "action": "create", "title": "New Document", "folder_token": "fldcnXXX" }
 ```
+
+Creates an empty document (title only).
 
 ### List Blocks
 
