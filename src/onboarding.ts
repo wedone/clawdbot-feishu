@@ -23,6 +23,7 @@ import { probeFeishu } from "./probe.js";
 import type { FeishuConfig } from "./types.js";
 
 const channel = "feishu" as const;
+let onboardingDmPolicyAccountId: string | undefined;
 
 function resolveOnboardingAccountId(cfg: ClawdbotConfig, accountId?: string | null): string {
   const raw = accountId?.trim();
@@ -30,6 +31,10 @@ function resolveOnboardingAccountId(cfg: ClawdbotConfig, accountId?: string | nu
     return normalizeAccountId(raw);
   }
   return resolveDefaultFeishuAccountId(cfg);
+}
+
+function resolveDmPolicyAccountId(cfg: ClawdbotConfig, accountId?: string | null): string {
+  return resolveOnboardingAccountId(cfg, accountId ?? onboardingDmPolicyAccountId);
 }
 
 function upsertFeishuAccountConfig(
@@ -79,7 +84,7 @@ function setFeishuDmPolicy(
   dmPolicy: DmPolicy,
   accountId?: string,
 ): ClawdbotConfig {
-  const resolvedAccountId = resolveOnboardingAccountId(cfg, accountId);
+  const resolvedAccountId = resolveDmPolicyAccountId(cfg, accountId);
   const account = resolveFeishuAccount({ cfg, accountId: resolvedAccountId });
   // Feishu channel config does not support "disabled" as a dmPolicy value.
   const effectiveDmPolicy = dmPolicy === "disabled" ? "pairing" : dmPolicy;
@@ -110,7 +115,7 @@ async function promptFeishuAllowFrom(params: {
   prompter: WizardPrompter;
   accountId?: string;
 }): Promise<ClawdbotConfig> {
-  const accountId = resolveOnboardingAccountId(params.cfg, params.accountId);
+  const accountId = resolveDmPolicyAccountId(params.cfg, params.accountId);
   const existing = resolveFeishuAccount({ cfg: params.cfg, accountId }).config.allowFrom ?? [];
   const accountLabel = accountId === DEFAULT_ACCOUNT_ID ? "default" : accountId;
   await params.prompter.note(
@@ -189,10 +194,10 @@ const dmPolicy: ChannelOnboardingDmPolicy = {
   policyKey: "channels.feishu.dmPolicy",
   allowFromKey: "channels.feishu.allowFrom",
   getCurrent: (cfg) => {
-    const accountId = resolveDefaultFeishuAccountId(cfg);
+    const accountId = resolveDmPolicyAccountId(cfg);
     return resolveFeishuAccount({ cfg, accountId }).config.dmPolicy ?? "pairing";
   },
-  setPolicy: (cfg, policy, accountId?: string) => setFeishuDmPolicy(cfg, policy, accountId),
+  setPolicy: (cfg, policy) => setFeishuDmPolicy(cfg, policy, onboardingDmPolicyAccountId),
   promptAllowFrom: promptFeishuAllowFrom,
 };
 
@@ -260,6 +265,7 @@ export const feishuOnboardingAdapter: ChannelOnboardingAdapter = {
         defaultAccountId: defaultFeishuAccountId,
       });
     }
+    onboardingDmPolicyAccountId = feishuAccountId;
     const accountLabel = feishuAccountId === DEFAULT_ACCOUNT_ID ? "default" : feishuAccountId;
     const currentAccount = resolveFeishuAccount({ cfg, accountId: feishuAccountId });
     const resolved = resolveFeishuCredentials(currentAccount.config);
@@ -428,6 +434,10 @@ export const feishuOnboardingAdapter: ChannelOnboardingAdapter = {
   },
 
   dmPolicy,
+
+  onAccountRecorded: (accountId) => {
+    onboardingDmPolicyAccountId = normalizeAccountId(accountId);
+  },
 
   disable: (cfg) => ({
     ...cfg,
