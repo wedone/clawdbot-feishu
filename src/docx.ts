@@ -164,6 +164,149 @@ async function listAppScopes(client: Lark.Client) {
   };
 }
 
+/**
+ * Builds comment content structure from plain text
+ * @param content Comment text content
+ * @returns Formatted comment content for Feishu API
+ */
+function buildCommentContent(content: string) {
+  return {
+    elements: [
+      {
+        text_run: { text: content },
+        type: "text_run",
+      },
+    ],
+  };
+}
+
+function normalizePageSize(pageSize?: number) {
+  if (pageSize === undefined) return 50;
+  if (!Number.isInteger(pageSize) || pageSize < 1) {
+    throw new Error("page_size must be a positive integer");
+  }
+  return pageSize;
+}
+
+/**
+ * Lists all comments for a document with pagination support
+ * @param client Feishu API client
+ * @param docToken Document token
+ * @param pageToken Page token for pagination
+ * @param pageSize Page size (default: Feishu API default)
+ * @returns Comments list with pagination info
+ */
+async function listComments(client: Lark.Client, docToken: string, pageToken?: string, pageSize?: number) {
+  const normalizedPageSize = normalizePageSize(pageSize);
+  const res = await (client as any).drive.fileComment.list({
+    path: { file_token: docToken },
+    params: {
+      file_type: "docx",
+      page_token: pageToken,
+      page_size: normalizedPageSize,
+    },
+  });
+
+  if (res.code !== 0) throw new Error(res.msg || "Failed to list comments");
+
+  return {
+    comments: Array.isArray(res.data?.items) ? res.data.items : [],
+    page_token: res.data?.page_token,
+    has_more: Boolean(res.data?.has_more),
+  };
+}
+
+/**
+ * Creates a new comment on a document
+ * @param client Feishu API client
+ * @param docToken Document token
+ * @param content Comment text content
+ * @returns Created comment information
+ */
+async function createComment(client: Lark.Client, docToken: string, content: string) {
+  const res = await (client as any).drive.fileComment.create({
+    path: { file_token: docToken },
+    params: {
+      file_type: "docx",
+    },
+    data: {
+      reply_list: {
+        replies: [
+          {
+            content: buildCommentContent(content),
+          },
+        ],
+      },
+    },
+  });
+
+  if (res.code !== 0) throw new Error(res.msg || "Failed to create comment");
+
+  if (!res.data?.comment_id) {
+    throw new Error("Comment creation failed: No comment ID returned");
+  }
+
+  return {
+    comment_id: res.data.comment_id,
+    comment: res.data,
+  };
+}
+
+/**
+ * Gets a single comment by ID
+ * @param client Feishu API client
+ * @param docToken Document token
+ * @param commentId Comment ID to retrieve
+ * @returns Comment details
+ */
+async function getComment(client: Lark.Client, docToken: string, commentId: string) {
+  const res = await (client as any).drive.fileComment.get({
+    path: { file_token: docToken, comment_id: commentId },
+    params: {
+      file_type: "docx",
+    },
+  });
+
+  if (res.code !== 0) throw new Error(res.msg || "Failed to get comment");
+
+  if (!res.data) {
+    throw new Error(`Comment not found: ${commentId}`);
+  }
+
+  return {
+    comment: res.data,
+  };
+}
+
+/**
+ * Lists all replies to a specific comment with pagination support
+ * @param client Feishu API client
+ * @param docToken Document token
+ * @param commentId Comment ID to list replies for
+ * @param pageToken Page token for pagination
+ * @param pageSize Page size (default: Feishu API default)
+ * @returns Replies list with pagination info
+ */
+async function listCommentReplies(client: Lark.Client, docToken: string, commentId: string, pageToken?: string, pageSize?: number) {
+  const normalizedPageSize = normalizePageSize(pageSize);
+  const res = await (client as any).drive.fileCommentReply.list({
+    path: { file_token: docToken, comment_id: commentId },
+    params: {
+      file_type: "docx",
+      page_token: pageToken,
+      page_size: normalizedPageSize,
+    },
+  });
+
+  if (res.code !== 0) throw new Error(res.msg || "Failed to list comment replies");
+
+  return {
+    replies: Array.isArray(res.data?.items) ? res.data.items : [],
+    page_token: res.data?.page_token,
+    has_more: Boolean(res.data?.has_more),
+  };
+}
+
 // ============ Tool Registration ============
 
 export function registerFeishuDocTools(api: OpenClawPluginApi) {
@@ -189,7 +332,7 @@ export function registerFeishuDocTools(api: OpenClawPluginApi) {
         name: "feishu_doc",
         label: "Feishu Doc",
         description:
-          'Feishu document operations. Actions: read, write, append, create, create_and_write, list_blocks, get_block, update_block, delete_block. Use "create_and_write" for atomic create + content write.',
+          'Feishu document operations. Actions: read, write, append, create, create_and_write, list_blocks, get_block, update_block, delete_block, list_comments, create_comment, get_comment, list_comment_replies. Use "create_and_write" for atomic create + content write.',
         parameters: FeishuDocSchema,
         async execute(_toolCallId, params) {
           const p = params as FeishuDocParams;
@@ -227,6 +370,14 @@ export function registerFeishuDocTools(api: OpenClawPluginApi) {
                     return json(await updateBlock(client, p.doc_token, p.block_id, p.content));
                   case "delete_block":
                     return json(await deleteBlock(client, p.doc_token, p.block_id));
+                  case "list_comments":
+                    return json(await listComments(client, p.doc_token, p.page_token, p.page_size));
+                  case "create_comment":
+                    return json(await createComment(client, p.doc_token, p.content));
+                  case "get_comment":
+                    return json(await getComment(client, p.doc_token, p.comment_id));
+                  case "list_comment_replies":
+                    return json(await listCommentReplies(client, p.doc_token, p.comment_id, p.page_token, p.page_size));
                   default:
                     return json({ error: `Unknown action: ${(p as any).action}` });
                 }
