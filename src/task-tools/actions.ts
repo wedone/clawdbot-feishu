@@ -1,17 +1,27 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import type { TaskClient } from "./common.js";
 import type {
   CreateSubtaskParams,
-  CreateTaskCommentParams,
   CreateTaskParams,
-  DeleteTaskCommentParams,
-  GetTaskCommentParams,
+  DeleteTaskAttachmentParams,
+  GetTaskAttachmentParams,
   GetTaskParams,
-  ListTaskCommentsParams,
-  TaskCommentPatchComment,
+  ListTaskAttachmentsParams,
   TaskUpdateTask,
-  UpdateTaskCommentParams,
+  UploadTaskAttachmentParams,
   UpdateTaskParams,
 } from "./schemas.js";
+import {
+  DEFAULT_TASK_ATTACHMENT_FILENAME,
+  DEFAULT_TASK_ATTACHMENT_MAX_BYTES,
+  BYTES_PER_MEGABYTE,
+  HEX_RADIX,
+  RANDOM_TOKEN_PREFIX_LENGTH,
+  SIZE_DISPLAY_FRACTION_DIGITS,
+} from "./constants.js";
+import { getFeishuRuntime } from "../runtime.js";
 import { runTaskApiCall } from "./common.js";
 
 const SUPPORTED_PATCH_FIELDS = new Set<keyof TaskUpdateTask>([
@@ -25,7 +35,6 @@ const SUPPORTED_PATCH_FIELDS = new Set<keyof TaskUpdateTask>([
   "mode",
   "is_milestone",
 ]);
-const SUPPORTED_COMMENT_PATCH_FIELDS = new Set<keyof TaskCommentPatchComment>(["content"]);
 
 function omitUndefined<T extends Record<string, unknown>>(obj: T): T {
   return Object.fromEntries(
@@ -36,12 +45,6 @@ function omitUndefined<T extends Record<string, unknown>>(obj: T): T {
 function inferUpdateFields(task: TaskUpdateTask): string[] {
   return Object.keys(task).filter((field) =>
     SUPPORTED_PATCH_FIELDS.has(field as keyof TaskUpdateTask),
-  );
-}
-
-function inferCommentUpdateFields(comment: TaskCommentPatchComment): string[] {
-  return Object.keys(comment).filter((field) =>
-    SUPPORTED_COMMENT_PATCH_FIELDS.has(field as keyof TaskCommentPatchComment),
   );
 }
 
@@ -65,18 +68,79 @@ function formatTask(task: Record<string, unknown> | undefined) {
   };
 }
 
-function formatComment(comment: Record<string, unknown> | undefined) {
-  if (!comment) return undefined;
+function formatAttachment(attachment: Record<string, unknown> | undefined) {
+  if (!attachment) return undefined;
   return {
-    id: comment.id,
-    content: comment.content,
-    creator: comment.creator,
-    reply_to_comment_id: comment.reply_to_comment_id,
-    created_at: comment.created_at,
-    updated_at: comment.updated_at,
-    resource_type: comment.resource_type,
-    resource_id: comment.resource_id,
+    guid: attachment.guid,
+    file_token: attachment.file_token,
+    name: attachment.name,
+    size: attachment.size,
+    uploader: attachment.uploader,
+    is_cover: attachment.is_cover,
+    uploaded_at: attachment.uploaded_at,
+    url: attachment.url,
+    resource: attachment.resource,
   };
+}
+
+function sanitizeUploadFilename(input: string) {
+  const base = path.basename(input.trim());
+  return base.length > 0 ? base : DEFAULT_TASK_ATTACHMENT_FILENAME;
+}
+
+async function ensureUploadableLocalFile(filePath: string, maxBytes: number) {
+  let stat: fs.Stats;
+  try {
+    stat = await fs.promises.stat(filePath);
+  } catch {
+    throw new Error(`file_path not found: ${filePath}`);
+  }
+
+  if (!stat.isFile()) {
+    throw new Error(`file_path is not a regular file: ${filePath}`);
+  }
+
+  if (stat.size > maxBytes) {
+    throw new Error(
+      `file_path exceeds ${(maxBytes / BYTES_PER_MEGABYTE).toFixed(SIZE_DISPLAY_FRACTION_DIGITS)}MB limit: ${filePath}`,
+    );
+  }
+}
+
+async function saveBufferToTempFile(buffer: Buffer, fileName: string) {
+  const safeName = sanitizeUploadFilename(fileName);
+  const tempPath = path.join(
+    os.tmpdir(),
+    `feishu-task-attachment-${Date.now()}-${Math.random().toString(HEX_RADIX).slice(RANDOM_TOKEN_PREFIX_LENGTH)}-${safeName}`,
+  );
+
+  await fs.promises.writeFile(tempPath, buffer);
+
+  return {
+    tempPath,
+    cleanup: async () => {
+      await fs.promises.unlink(tempPath).catch(() => undefined);
+    },
+  };
+}
+
+async function downloadToTempFile(fileUrl: string, filename: string | undefined, maxBytes: number) {
+  const loaded = await getFeishuRuntime().media.loadWebMedia(fileUrl, {
+    maxBytes,
+    optimizeImages: false,
+  });
+
+  const parsedPath = (() => {
+    try {
+      return new URL(fileUrl).pathname;
+    } catch {
+      return "";
+    }
+  })();
+
+  const fallbackName = path.basename(parsedPath) || DEFAULT_TASK_ATTACHMENT_FILENAME;
+  const preferredName = filename?.trim() ? filename : loaded.fileName ?? fallbackName;
+  return saveBufferToTempFile(loaded.buffer, preferredName);
 }
 
 export async function createTask(client: TaskClient, params: CreateTaskParams) {
@@ -134,38 +198,16 @@ export async function createSubtask(client: TaskClient, params: CreateSubtaskPar
   };
 }
 
-export async function createTaskComment(client: TaskClient, params: CreateTaskCommentParams) {
-  const res = await runTaskApiCall("task.v2.comment.create", () =>
-    client.task.v2.comment.create({
-      data: {
-        content: params.content,
-        reply_to_comment_id: params.reply_to_comment_id,
-        resource_type: "task",
-        resource_id: params.task_guid,
-      },
-      params: omitUndefined({
-        user_id_type: params.user_id_type,
-      }),
-    }),
-  );
-
-  return {
-    comment: formatComment(
-      (res.data?.comment ?? undefined) as Record<string, unknown> | undefined,
-    ),
-  };
-}
-
-export async function deleteTaskComment(client: TaskClient, params: DeleteTaskCommentParams) {
-  await runTaskApiCall("task.v2.comment.delete", () =>
-    client.task.v2.comment.delete({
-      path: { comment_id: params.comment_id },
+export async function deleteTaskAttachment(client: TaskClient, params: DeleteTaskAttachmentParams) {
+  await runTaskApiCall("task.v2.attachment.delete", () =>
+    client.task.v2.attachment.delete({
+      path: { attachment_guid: params.attachment_guid },
     }),
   );
 
   return {
     success: true,
-    comment_id: params.comment_id,
+    attachment_guid: params.attachment_guid,
   };
 }
 
@@ -197,10 +239,10 @@ export async function getTask(client: TaskClient, params: GetTaskParams) {
   };
 }
 
-export async function getTaskComment(client: TaskClient, params: GetTaskCommentParams) {
-  const res = await runTaskApiCall("task.v2.comment.get", () =>
-    client.task.v2.comment.get({
-      path: { comment_id: params.comment_id },
+export async function getTaskAttachment(client: TaskClient, params: GetTaskAttachmentParams) {
+  const res = await runTaskApiCall("task.v2.attachment.get", () =>
+    client.task.v2.attachment.get({
+      path: { attachment_guid: params.attachment_guid },
       params: omitUndefined({
         user_id_type: params.user_id_type,
       }),
@@ -208,21 +250,21 @@ export async function getTaskComment(client: TaskClient, params: GetTaskCommentP
   );
 
   return {
-    comment: formatComment(
-      (res.data?.comment ?? undefined) as Record<string, unknown> | undefined,
+    attachment: formatAttachment(
+      (res.data?.attachment ?? undefined) as Record<string, unknown> | undefined,
     ),
   };
 }
 
-export async function listTaskComments(client: TaskClient, params: ListTaskCommentsParams) {
-  const res = await runTaskApiCall("task.v2.comment.list", () =>
-    client.task.v2.comment.list({
+export async function listTaskAttachments(client: TaskClient, params: ListTaskAttachmentsParams) {
+  const res = await runTaskApiCall("task.v2.attachment.list", () =>
+    client.task.v2.attachment.list({
       params: omitUndefined({
         resource_type: "task",
         resource_id: params.task_guid,
         page_size: params.page_size,
         page_token: params.page_token,
-        direction: params.direction,
+        updated_mesc: params.updated_mesc,
         user_id_type: params.user_id_type,
       }),
     }),
@@ -231,7 +273,7 @@ export async function listTaskComments(client: TaskClient, params: ListTaskComme
   const items = (res.data?.items ?? []) as Record<string, unknown>[];
 
   return {
-    items: items.map((item) => formatComment(item)),
+    items: items.map((item) => formatAttachment(item)),
     page_token: res.data?.page_token,
     has_more: res.data?.has_more,
   };
@@ -267,43 +309,51 @@ export async function updateTask(client: TaskClient, params: UpdateTaskParams) {
   };
 }
 
-export async function updateTaskComment(client: TaskClient, params: UpdateTaskCommentParams) {
-  const comment = omitUndefined(params.comment as Record<string, unknown>) as TaskCommentPatchComment;
-  const updateFields = params.update_fields?.length
-    ? params.update_fields
-    : inferCommentUpdateFields(comment);
+export async function uploadTaskAttachment(
+  client: TaskClient,
+  params: UploadTaskAttachmentParams,
+  options?: { maxBytes?: number },
+) {
+  const maxBytes =
+    typeof options?.maxBytes === "number" && options.maxBytes > 0
+      ? options.maxBytes
+      : DEFAULT_TASK_ATTACHMENT_MAX_BYTES;
 
-  if (Object.keys(comment).length === 0) {
-    throw new Error("comment update payload is empty");
+  let tempCleanup: (() => Promise<void>) | undefined;
+  let filePath: string;
+
+  if ("file_path" in params) {
+    filePath = params.file_path;
+    await ensureUploadableLocalFile(filePath, maxBytes);
+  } else {
+    const download = await downloadToTempFile(params.file_url, params.filename, maxBytes);
+    filePath = download.tempPath;
+    tempCleanup = download.cleanup;
   }
-  if (updateFields.length === 0) {
-    throw new Error("no valid update_fields provided or inferred from comment payload");
+
+  try {
+    const res = await runTaskApiCall("task.v2.attachment.upload", async () => {
+      const data = await client.task.v2.attachment.upload({
+        data: {
+          resource_type: "task",
+          resource_id: params.task_guid,
+          file: fs.createReadStream(filePath),
+        },
+        params: omitUndefined({
+          user_id_type: params.user_id_type,
+        }),
+      });
+      return { code: 0, data } as { code: number; data: typeof data };
+    });
+
+    const items = (res.data?.items ?? []) as Record<string, unknown>[];
+
+    return {
+      items: items.map((item) => formatAttachment(item)),
+    };
+  } finally {
+    if (tempCleanup) {
+      await tempCleanup();
+    }
   }
-
-  const invalid = updateFields.filter(
-    (field) => !SUPPORTED_COMMENT_PATCH_FIELDS.has(field as keyof TaskCommentPatchComment),
-  );
-  if (invalid.length > 0) {
-    throw new Error(`unsupported update_fields: ${invalid.join(", ")}`);
-  }
-
-  const res = await runTaskApiCall("task.v2.comment.patch", () =>
-    client.task.v2.comment.patch({
-      path: { comment_id: params.comment_id },
-      data: {
-        comment,
-        update_fields: updateFields,
-      },
-      params: omitUndefined({
-        user_id_type: params.user_id_type,
-      }),
-    }),
-  );
-
-  return {
-    comment: formatComment(
-      (res.data?.comment ?? undefined) as Record<string, unknown> | undefined,
-    ),
-    update_fields: updateFields,
-  };
 }

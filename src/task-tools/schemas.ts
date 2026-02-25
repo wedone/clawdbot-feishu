@@ -18,6 +18,18 @@ type TaskCommentPatchPayload = NonNullable<
 type TaskCommentDeletePayload = NonNullable<
   Parameters<TaskClient["task"]["v2"]["comment"]["delete"]>[0]
 >;
+type TaskAttachmentUploadPayload = NonNullable<
+  Parameters<TaskClient["task"]["v2"]["attachment"]["upload"]>[0]
+>;
+type TaskAttachmentGetPayload = NonNullable<
+  Parameters<TaskClient["task"]["v2"]["attachment"]["get"]>[0]
+>;
+type TaskAttachmentListPayload = NonNullable<
+  Parameters<TaskClient["task"]["v2"]["attachment"]["list"]>[0]
+>;
+type TaskAttachmentDeletePayload = NonNullable<
+  Parameters<TaskClient["task"]["v2"]["attachment"]["delete"]>[0]
+>;
 
 export type TaskCreateData = TaskCreatePayload["data"];
 export type TaskUpdateData = TaskUpdatePayload["data"];
@@ -91,11 +103,41 @@ export type DeleteTaskCommentParams = {
   comment_id: TaskCommentDeletePayload["path"]["comment_id"];
 };
 
+export type UploadTaskAttachmentParams =
+  | {
+      task_guid: string;
+      file_path: string;
+      user_id_type?: NonNullable<TaskAttachmentUploadPayload["params"]>["user_id_type"];
+    }
+  | {
+      task_guid: string;
+      file_url: string;
+      filename?: string;
+      user_id_type?: NonNullable<TaskAttachmentUploadPayload["params"]>["user_id_type"];
+    };
+
+export type ListTaskAttachmentsParams = {
+  task_guid: NonNullable<TaskAttachmentListPayload["params"]>["resource_id"];
+  page_size?: NonNullable<TaskAttachmentListPayload["params"]>["page_size"];
+  page_token?: NonNullable<TaskAttachmentListPayload["params"]>["page_token"];
+  updated_mesc?: NonNullable<TaskAttachmentListPayload["params"]>["updated_mesc"];
+  user_id_type?: NonNullable<TaskAttachmentListPayload["params"]>["user_id_type"];
+};
+
+export type GetTaskAttachmentParams = {
+  attachment_guid: TaskAttachmentGetPayload["path"]["attachment_guid"];
+  user_id_type?: NonNullable<TaskAttachmentGetPayload["params"]>["user_id_type"];
+};
+
+export type DeleteTaskAttachmentParams = {
+  attachment_guid: NonNullable<TaskAttachmentDeletePayload["path"]>["attachment_guid"];
+};
+
 const TaskDateSchema = Type.Object({
   timestamp: Type.Optional(
     Type.String({
       description:
-        "Unix timestamp in milliseconds (string), e.g. \"1735689600000\" (13-digit ms)",
+        'Unix timestamp in milliseconds (string), e.g. "1735689600000" (13-digit ms)',
     }),
   ),
   is_all_day: Type.Optional(Type.Boolean({ description: "Whether this is an all-day date" })),
@@ -103,8 +145,8 @@ const TaskDateSchema = Type.Object({
 
 const TaskMemberSchema = Type.Object({
   id: Type.String({ description: "Member ID (with type controlled by user_id_type)" }),
-  type: Type.Optional(Type.String({ description: "Member type (usually \"user\")" })),
-  role: Type.String({ description: "Member role, e.g. \"assignee\"" }),
+  type: Type.Optional(Type.String({ description: 'Member type (usually "user")' })),
+  role: Type.String({ description: 'Member role, e.g. "assignee"' }),
   name: Type.Optional(Type.String({ description: "Optional display name" })),
 });
 
@@ -255,4 +297,49 @@ export const UpdateTaskCommentSchema = Type.Object({
 
 export const DeleteTaskCommentSchema = Type.Object({
   comment_id: Type.String({ description: "Comment ID to delete" }),
+});
+
+export const UploadTaskAttachmentSchema = Type.Union([
+  Type.Object({
+    task_guid: Type.String({ description: "Task GUID to upload attachment to" }),
+    file_path: Type.String({ description: "Local file path on the OpenClaw host" }),
+    user_id_type: Type.Optional(
+      Type.String({ description: "User ID type for returned uploader" }),
+    ),
+  }),
+  Type.Object({
+    task_guid: Type.String({ description: "Task GUID to upload attachment to" }),
+    file_url: Type.String({ description: "Remote file URL to download and upload" }),
+    filename: Type.Optional(Type.String({ description: "Override filename for uploaded attachment" })),
+    user_id_type: Type.Optional(
+      Type.String({ description: "User ID type for returned uploader" }),
+    ),
+  }),
+]);
+
+export const ListTaskAttachmentsSchema = Type.Object({
+  task_guid: Type.String({ description: "Task GUID to list attachments for" }),
+  page_size: Type.Optional(
+    Type.Number({
+      description: "Page size (1-100)",
+      minimum: 1,
+      maximum: 100,
+    }),
+  ),
+  page_token: Type.Optional(Type.String({ description: "Pagination token" })),
+  updated_mesc: Type.Optional(Type.String({ description: "Updated timestamp filter" })),
+  user_id_type: Type.Optional(
+    Type.String({ description: "User ID type for returned uploader" }),
+  ),
+});
+
+export const GetTaskAttachmentSchema = Type.Object({
+  attachment_guid: Type.String({ description: "Attachment GUID to retrieve" }),
+  user_id_type: Type.Optional(
+    Type.String({ description: "User ID type for returned uploader" }),
+  ),
+});
+
+export const DeleteTaskAttachmentSchema = Type.Object({
+  attachment_guid: Type.String({ description: "Attachment GUID to delete" }),
 });
