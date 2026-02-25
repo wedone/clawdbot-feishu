@@ -83,6 +83,7 @@ openclaw plugins update feishu
 | `wiki:wiki:readonly` | `feishu_wiki` | List spaces, list nodes, get node info, search |
 | `bitable:app:readonly` | `feishu_bitable` | Read bitable records and fields |
 | `task:task:read` | `feishu_task_get` | Get task details |
+| `task:tasklist:read` | `feishu_tasklist_get`, `feishu_tasklist_list` | Get/list tasklists |
 | `task:comment:read` | `feishu_task_comment_list`, `feishu_task_comment_get` | List/get task comments |
 | `task:attachment:read` | `feishu_task_attachment_list`, `feishu_task_attachment_get` | List/get task attachments |
 
@@ -96,10 +97,11 @@ openclaw plugins update feishu
 | `wiki:wiki` | `feishu_wiki` | Create/move/rename wiki nodes |
 | `bitable:app` | `feishu_bitable` | Create/update/delete bitable records and manage fields |
 | `task:task:write` | `feishu_task_create`, `feishu_task_subtask_create`, `feishu_task_update`, `feishu_task_delete` | Create/update/delete tasks |
+| `task:tasklist:write` | `feishu_tasklist_create`, `feishu_tasklist_update`, `feishu_tasklist_delete`, `feishu_tasklist_add_members`, `feishu_tasklist_remove_members`, `feishu_task_add_tasklist`, `feishu_task_remove_tasklist` | Create/update/delete tasklists and manage membership |
 | `task:comment:write` | `feishu_task_comment_create`, `feishu_task_comment_update`, `feishu_task_comment_delete` | Create/update/delete task comments |
 | `task:attachment:write` | `feishu_task_attachment_upload`, `feishu_task_attachment_delete` | Upload/delete task attachments |
 
-> Task scope names may vary slightly in Feishu console UI. If needed, search for Task / Comment / Attachment-related permissions and grant read/write accordingly.
+> Task scope names may vary slightly in Feishu console UI. If needed, search for Task / Tasklist / Comment / Attachment-related permissions and grant read/write accordingly.
 
 #### Task Comment Scopes ⚠️
 
@@ -116,6 +118,12 @@ Task attachments support upload/get/list/delete. Upload sources:
 2. Remote links (`file_url`, public or presigned)
 
 For `file_url`, OpenClaw runtime media loader is used with safety checks and size limit (`mediaMaxMb`), then the downloaded file is uploaded via a temporary local file.
+
+#### Tasklist Ownership ⚠️
+
+> **Important:** Keep tasklist owner as the bot. Add users as members instead.
+
+Tasklist access is granted based on owner + member roles. If you change the owner to a user and the bot is not a member, the bot may lose permission to read/edit/manage that tasklist (and subsequent operations will fail).
 
 #### Task Visibility & Subtasks ⚠️
 
@@ -526,6 +534,7 @@ openclaw plugins update feishu
 | `wiki:wiki:readonly` | `feishu_wiki` | 列出空间、列出节点、获取节点详情、搜索 |
 | `bitable:app:readonly` | `feishu_bitable` | 读取多维表格记录和字段 |
 | `task:task:read` | `feishu_task_get` | 获取任务详情 |
+| `task:tasklist:read` | `feishu_tasklist_get`, `feishu_tasklist_list` | 获取/列出任务清单（tasklists） |
 | `task:comment:read` | `feishu_task_comment_list`, `feishu_task_comment_get` | 列出/获取任务评论 |
 | `task:attachment:read` | `feishu_task_attachment_list`, `feishu_task_attachment_get` | 列出/获取任务附件 |
 
@@ -539,10 +548,11 @@ openclaw plugins update feishu
 | `wiki:wiki` | `feishu_wiki` | 创建/移动/重命名知识库节点 |
 | `bitable:app` | `feishu_bitable` | 创建/更新/删除多维表格记录并管理字段 |
 | `task:task:write` | `feishu_task_create`, `feishu_task_subtask_create`, `feishu_task_update`, `feishu_task_delete` | 创建/更新/删除任务 |
+| `task:tasklist:write` | `feishu_tasklist_create`, `feishu_tasklist_update`, `feishu_tasklist_delete`, `feishu_tasklist_add_members`, `feishu_tasklist_remove_members`, `feishu_task_add_tasklist`, `feishu_task_remove_tasklist` | 创建/更新/删除任务清单并管理成员/关联任务 |
 | `task:comment:write` | `feishu_task_comment_create`, `feishu_task_comment_update`, `feishu_task_comment_delete` | 创建/更新/删除任务评论 |
 | `task:attachment:write` | `feishu_task_attachment_upload`, `feishu_task_attachment_delete` | 上传/删除任务附件 |
 
-> 飞书控制台中任务权限的显示名称可能略有差异，必要时可按关键字 `task` / `comment` / `attachment` 搜索并授予对应读写权限。
+> 飞书控制台中任务权限的显示名称可能略有差异，必要时可按关键字 `task` / `tasklist` / `comment` / `attachment` 搜索并授予对应读写权限。
 
 #### 任务评论权限 ⚠️
 
@@ -559,6 +569,12 @@ openclaw plugins update feishu
 2. 可直接下载的远程链接（`file_url`，公开/预签名 URL）
 
 `file_url` 上传路径会使用 OpenClaw 运行时的媒体下载安全校验与大小限制（`mediaMaxMb`），随后经临时本地文件上传到任务附件。
+
+#### 任务清单所有者限制 ⚠️
+
+> **重要：** 创建/修改任务清单时，请保持清单所有者为机器人本身，只把用户作为协作人添加。
+
+任务清单权限基于“所有者 + 协作成员角色”授予。如果把清单所有者改成用户、且机器人不在协作成员中，机器人可能会失去对该清单的读取/编辑/管理权限，导致后续对清单的操作失败。
 
 #### 任务限制 ⚠️
 

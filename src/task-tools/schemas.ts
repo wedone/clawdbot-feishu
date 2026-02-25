@@ -5,6 +5,12 @@ type TaskCreatePayload = NonNullable<Parameters<TaskClient["task"]["v2"]["task"]
 type TaskUpdatePayload = NonNullable<Parameters<TaskClient["task"]["v2"]["task"]["patch"]>[0]>;
 type TaskDeletePayload = NonNullable<Parameters<TaskClient["task"]["v2"]["task"]["delete"]>[0]>;
 type TaskGetPayload = NonNullable<Parameters<TaskClient["task"]["v2"]["task"]["get"]>[0]>;
+type TaskAddTasklistPayload = NonNullable<
+  Parameters<TaskClient["task"]["v2"]["task"]["addTasklist"]>[0]
+>;
+type TaskRemoveTasklistPayload = NonNullable<
+  Parameters<TaskClient["task"]["v2"]["task"]["removeTasklist"]>[0]
+>;
 type TaskCommentCreatePayload = NonNullable<
   Parameters<TaskClient["task"]["v2"]["comment"]["create"]>[0]
 >;
@@ -30,12 +36,46 @@ type TaskAttachmentListPayload = NonNullable<
 type TaskAttachmentDeletePayload = NonNullable<
   Parameters<TaskClient["task"]["v2"]["attachment"]["delete"]>[0]
 >;
+type TasklistCreatePayload = NonNullable<
+  Parameters<TaskClient["task"]["v2"]["tasklist"]["create"]>[0]
+>;
+type TasklistGetPayload = NonNullable<Parameters<TaskClient["task"]["v2"]["tasklist"]["get"]>[0]>;
+type TasklistListPayload = NonNullable<Parameters<TaskClient["task"]["v2"]["tasklist"]["list"]>[0]>;
+type TasklistPatchPayload = NonNullable<
+  Parameters<TaskClient["task"]["v2"]["tasklist"]["patch"]>[0]
+>;
+type TasklistDeletePayload = NonNullable<
+  Parameters<TaskClient["task"]["v2"]["tasklist"]["delete"]>[0]
+>;
+type TasklistAddMembersPayload = NonNullable<
+  Parameters<TaskClient["task"]["v2"]["tasklist"]["addMembers"]>[0]
+>;
+type TasklistRemoveMembersPayload = NonNullable<
+  Parameters<TaskClient["task"]["v2"]["tasklist"]["removeMembers"]>[0]
+>;
 
 export type TaskCreateData = TaskCreatePayload["data"];
 export type TaskUpdateData = TaskUpdatePayload["data"];
 export type TaskUpdateTask = NonNullable<TaskUpdateData["task"]>;
 export type TaskCommentPatchData = TaskCommentPatchPayload["data"];
 export type TaskCommentPatchComment = TaskCommentPatchData["comment"];
+export type TasklistCreateData = TasklistCreatePayload["data"];
+export type TasklistPatchData = TasklistPatchPayload["data"];
+export type TasklistPatchTasklist = NonNullable<TasklistPatchData["tasklist"]>;
+export type TasklistMember = NonNullable<NonNullable<TasklistCreateData["members"]>[number]>;
+
+export const TASK_UPDATE_FIELD_VALUES = [
+  "summary",
+  "description",
+  "due",
+  "start",
+  "extra",
+  "completed_at",
+  "repeat_rule",
+  "mode",
+  "is_milestone",
+] as const;
+export const TASKLIST_UPDATE_FIELD_VALUES = ["name", "owner", "archive_tasklist"] as const;
 
 export type CreateTaskParams = {
   summary: TaskCreateData["summary"];
@@ -70,6 +110,19 @@ export type UpdateTaskParams = {
   task: TaskUpdateTask;
   update_fields?: TaskUpdateData["update_fields"];
   user_id_type?: NonNullable<TaskUpdatePayload["params"]>["user_id_type"];
+};
+
+export type AddTaskToTasklistParams = {
+  task_guid: TaskAddTasklistPayload["path"]["task_guid"];
+  tasklist_guid: NonNullable<TaskAddTasklistPayload["data"]>["tasklist_guid"];
+  section_guid?: NonNullable<TaskAddTasklistPayload["data"]>["section_guid"];
+  user_id_type?: NonNullable<TaskAddTasklistPayload["params"]>["user_id_type"];
+};
+
+export type RemoveTaskFromTasklistParams = {
+  task_guid: TaskRemoveTasklistPayload["path"]["task_guid"];
+  tasklist_guid: NonNullable<TaskRemoveTasklistPayload["data"]>["tasklist_guid"];
+  user_id_type?: NonNullable<TaskRemoveTasklistPayload["params"]>["user_id_type"];
 };
 
 export type CreateTaskCommentParams = {
@@ -133,6 +186,48 @@ export type DeleteTaskAttachmentParams = {
   attachment_guid: NonNullable<TaskAttachmentDeletePayload["path"]>["attachment_guid"];
 };
 
+export type CreateTasklistParams = {
+  name: TasklistCreateData["name"];
+  members?: TasklistCreateData["members"];
+  archive_tasklist?: TasklistCreateData["archive_tasklist"];
+  user_id_type?: NonNullable<TasklistCreatePayload["params"]>["user_id_type"];
+};
+
+export type GetTasklistParams = {
+  tasklist_guid: NonNullable<TasklistGetPayload["path"]>["tasklist_guid"];
+  user_id_type?: NonNullable<TasklistGetPayload["params"]>["user_id_type"];
+};
+
+export type ListTasklistsParams = {
+  page_size?: NonNullable<TasklistListPayload["params"]>["page_size"];
+  page_token?: NonNullable<TasklistListPayload["params"]>["page_token"];
+  user_id_type?: NonNullable<TasklistListPayload["params"]>["user_id_type"];
+};
+
+export type UpdateTasklistParams = {
+  tasklist_guid: NonNullable<TasklistPatchPayload["path"]>["tasklist_guid"];
+  tasklist: TasklistPatchTasklist;
+  update_fields?: TasklistPatchData["update_fields"];
+  origin_owner_to_role?: TasklistPatchData["origin_owner_to_role"];
+  user_id_type?: NonNullable<TasklistPatchPayload["params"]>["user_id_type"];
+};
+
+export type DeleteTasklistParams = {
+  tasklist_guid: NonNullable<TasklistDeletePayload["path"]>["tasklist_guid"];
+};
+
+export type AddTasklistMembersParams = {
+  tasklist_guid: NonNullable<TasklistAddMembersPayload["path"]>["tasklist_guid"];
+  members: NonNullable<NonNullable<TasklistAddMembersPayload["data"]>["members"]>;
+  user_id_type?: NonNullable<TasklistAddMembersPayload["params"]>["user_id_type"];
+};
+
+export type RemoveTasklistMembersParams = {
+  tasklist_guid: NonNullable<TasklistRemoveMembersPayload["path"]>["tasklist_guid"];
+  members: NonNullable<NonNullable<TasklistRemoveMembersPayload["data"]>["members"]>;
+  user_id_type?: NonNullable<TasklistRemoveMembersPayload["params"]>["user_id_type"];
+};
+
 const TaskDateSchema = Type.Object({
   timestamp: Type.Optional(
     Type.String({
@@ -153,6 +248,31 @@ const TaskMemberSchema = Type.Object({
 const TasklistRefSchema = Type.Object({
   tasklist_guid: Type.Optional(Type.String({ description: "Tasklist GUID" })),
   section_guid: Type.Optional(Type.String({ description: "Section GUID in tasklist" })),
+});
+
+const TaskUpdateFieldSchema = Type.Union(
+  TASK_UPDATE_FIELD_VALUES.map((field) => Type.Literal(field)),
+);
+
+const TasklistMemberRoleSchema = Type.Union(
+  [Type.Literal("owner"), Type.Literal("editor"), Type.Literal("viewer")],
+  { description: "Member role (owner/editor/viewer)" },
+);
+
+const TasklistUpdateFieldSchema = Type.Union(
+  TASKLIST_UPDATE_FIELD_VALUES.map((field) => Type.Literal(field)),
+);
+
+const TasklistOriginOwnerRoleSchema = Type.Union(
+  [Type.Literal("editor"), Type.Literal("viewer"), Type.Literal("none")],
+  { description: "Role for original owner after owner transfer" },
+);
+
+const TasklistMemberSchema = Type.Object({
+  id: Type.String({ description: "Member ID (with type controlled by user_id_type)" }),
+  type: Type.Optional(Type.String({ description: "Member type (user/chat/app)" })),
+  role: Type.Optional(TasklistMemberRoleSchema),
+  name: Type.Optional(Type.String({ description: "Optional display name" })),
 });
 
 export const CreateTaskSchema = Type.Object({
@@ -223,10 +343,11 @@ export const UpdateTaskSchema = Type.Object({
   task_guid: Type.String({ description: "Task GUID to update" }),
   task: TaskUpdateContentSchema,
   update_fields: Type.Optional(
-    Type.Array(Type.String(), {
+    Type.Array(TaskUpdateFieldSchema, {
       description:
         "Fields to update. If omitted, this tool infers from keys in task (e.g. summary, description, due, start)",
       minItems: 1,
+      uniqueItems: true,
     }),
   ),
   user_id_type: Type.Optional(
@@ -297,6 +418,107 @@ export const UpdateTaskCommentSchema = Type.Object({
 
 export const DeleteTaskCommentSchema = Type.Object({
   comment_id: Type.String({ description: "Comment ID to delete" }),
+});
+
+const TasklistUpdateContentSchema = Type.Object(
+  {
+    name: Type.Optional(Type.String({ description: "Updated tasklist name" })),
+    owner: Type.Optional(TasklistMemberSchema),
+    archive_tasklist: Type.Optional(Type.Boolean({ description: "Archive/unarchive tasklist" })),
+  },
+  { minProperties: 1 },
+);
+
+export const AddTaskToTasklistSchema = Type.Object({
+  task_guid: Type.String({ description: "Task GUID to move" }),
+  tasklist_guid: Type.String({ description: "Tasklist GUID to add the task into" }),
+  section_guid: Type.Optional(Type.String({ description: "Tasklist section GUID" })),
+  user_id_type: Type.Optional(
+    Type.String({ description: "User ID type when task body contains user-related fields" }),
+  ),
+});
+
+export const RemoveTaskFromTasklistSchema = Type.Object({
+  task_guid: Type.String({ description: "Task GUID to move" }),
+  tasklist_guid: Type.String({ description: "Tasklist GUID to remove the task from" }),
+  user_id_type: Type.Optional(
+    Type.String({ description: "User ID type when task body contains user-related fields" }),
+  ),
+});
+
+export const CreateTasklistSchema = Type.Object({
+  name: Type.String({ description: "Tasklist name" }),
+  members: Type.Optional(Type.Array(TasklistMemberSchema, { description: "Initial members" })),
+  archive_tasklist: Type.Optional(
+    Type.Boolean({ description: "Whether to create as archived tasklist" }),
+  ),
+  user_id_type: Type.Optional(
+    Type.String({ description: "User ID type for member IDs, e.g. open_id/user_id/union_id" }),
+  ),
+});
+
+export const GetTasklistSchema = Type.Object({
+  tasklist_guid: Type.String({ description: "Tasklist GUID to retrieve" }),
+  user_id_type: Type.Optional(
+    Type.String({ description: "User ID type in returned members, e.g. open_id/user_id/union_id" }),
+  ),
+});
+
+export const ListTasklistsSchema = Type.Object({
+  page_size: Type.Optional(
+    Type.Number({
+      description: "Page size (1-100)",
+      minimum: 1,
+      maximum: 100,
+    }),
+  ),
+  page_token: Type.Optional(Type.String({ description: "Pagination token" })),
+  user_id_type: Type.Optional(
+    Type.String({ description: "User ID type in returned members, e.g. open_id/user_id/union_id" }),
+  ),
+});
+
+export const UpdateTasklistSchema = Type.Object({
+  tasklist_guid: Type.String({ description: "Tasklist GUID to update" }),
+  tasklist: TasklistUpdateContentSchema,
+  update_fields: Type.Optional(
+    Type.Array(TasklistUpdateFieldSchema, {
+      description:
+        "Fields to update. If omitted, this tool infers from keys in tasklist (e.g. name, owner, archive_tasklist)",
+      minItems: 1,
+      uniqueItems: true,
+    }),
+  ),
+  origin_owner_to_role: Type.Optional(TasklistOriginOwnerRoleSchema),
+  user_id_type: Type.Optional(
+    Type.String({ description: "User ID type when tasklist body contains user-related fields" }),
+  ),
+});
+
+export const DeleteTasklistSchema = Type.Object({
+  tasklist_guid: Type.String({ description: "Tasklist GUID to delete" }),
+});
+
+export const AddTasklistMembersSchema = Type.Object({
+  tasklist_guid: Type.String({ description: "Tasklist GUID to add members to" }),
+  members: Type.Array(TasklistMemberSchema, {
+    description: "Members to add",
+    minItems: 1,
+  }),
+  user_id_type: Type.Optional(
+    Type.String({ description: "User ID type for member IDs, e.g. open_id/user_id/union_id" }),
+  ),
+});
+
+export const RemoveTasklistMembersSchema = Type.Object({
+  tasklist_guid: Type.String({ description: "Tasklist GUID to remove members from" }),
+  members: Type.Array(TasklistMemberSchema, {
+    description: "Members to remove",
+    minItems: 1,
+  }),
+  user_id_type: Type.Optional(
+    Type.String({ description: "User ID type for member IDs, e.g. open_id/user_id/union_id" }),
+  ),
 });
 
 export const UploadTaskAttachmentSchema = Type.Union([
