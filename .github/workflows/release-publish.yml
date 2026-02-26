@@ -1,0 +1,124 @@
+name: Release Publish
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate Release Tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      dist_tag: ${{ steps.version.outputs.dist_tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck and tests
+        run: npm run ci:check
+
+      - name: Ensure tag commit is on main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" "origin/main"; then
+            echo "::error::Tagged commit is not reachable from origin/main."
+            exit 1
+          fi
+
+      - name: Validate tag and package version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TAG_NAME="${GITHUB_REF_NAME}"
+          TAG_VERSION="${TAG_NAME#v}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          SEMVER_REGEX='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'
+
+          if [[ ! "$TAG_VERSION" =~ $SEMVER_REGEX ]]; then
+            echo "::error::Tag version '$TAG_VERSION' is not valid semver."
+            exit 1
+          fi
+
+          if [[ "$TAG_VERSION" != "$PKG_VERSION" ]]; then
+            echo "::error::Tag version '$TAG_VERSION' does not match package.json version '$PKG_VERSION'."
+            exit 1
+          fi
+
+          DIST_TAG="latest"
+          if [[ "$PKG_VERSION" == *-* ]]; then
+            DIST_TAG="next"
+          fi
+
+          echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
+          echo "Release tag: $TAG_NAME"
+          echo "Package version: $PKG_VERSION"
+          echo "npm dist-tag: $DIST_TAG"
+
+      - name: Guard package contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm pack --dry-run --json > pack-result.json
+          node -e '
+            const fs = require("node:fs");
+            const data = JSON.parse(fs.readFileSync("pack-result.json", "utf8"));
+            const files = (data?.[0]?.files ?? []).map((f) => f.path);
+            const banned = files.filter((p) =>
+              /(^|\/)(__tests__|tests?)\/|\.test\.[cm]?[jt]sx?$|\.spec\.[cm]?[jt]sx?$/.test(p)
+            );
+            if (banned.length > 0) {
+              console.error("Found banned test files in npm package:");
+              for (const file of banned) console.error(` - ${file}`);
+              process.exit(1);
+            }
+            console.log(`Pack guard passed. Checked ${files.length} files.`);
+          '
+
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: validate
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          always-auth: true
+
+      - name: Publish package
+        run: npm publish --access public --provenance --tag "${{ needs.validate.outputs.dist_tag }}"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
