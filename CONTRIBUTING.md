@@ -137,6 +137,13 @@ pnpm openclaw gateway
 - Provide verification steps and results (basic flow + your changed feature).
 - Include logs/screenshots when they help review.
 - Do not include secrets or sensitive data in commits/logs.
+- Please use the PR template. Short and clear notes are enough.
+- Default template is English. If you prefer Chinese, you can use:
+  - `.github/PULL_REQUEST_TEMPLATE/pull_request_template_zh.md`
+- PR title format:
+  - `type: description` or `type(scope): description`
+  - Allowed `type`: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
+  - Examples: `feat: add webhook retry`, `fix(channel): handle empty mention`
 
 ### Quick troubleshooting
 
@@ -284,6 +291,13 @@ pnpm openclaw gateway
 - 给出验证步骤和结果（最基本流程 + 你改动的功能）。
 - 必要时附上日志或截图，便于评审。
 - 提交内容和日志中不包含密钥等敏感信息。
+- 请使用 PR 模板，简洁写清楚即可，不需要长篇描述。
+- 默认模板为英文。如需中文模板，可使用：
+  - `.github/PULL_REQUEST_TEMPLATE/pull_request_template_zh.md`
+- PR 标题建议使用：
+  - `type: description` 或 `type(scope): description`
+  - `type` 可选：`feat`、`fix`、`docs`、`refactor`、`test`、`chore`
+  - 示例：`feat: add webhook retry`、`fix(channel): handle empty mention`
 
 ### 快速排查
 
