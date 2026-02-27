@@ -156,18 +156,13 @@ export type DeleteTaskCommentParams = {
   comment_id: TaskCommentDeletePayload["path"]["comment_id"];
 };
 
-export type UploadTaskAttachmentParams =
-  | {
-      task_guid: string;
-      file_path: string;
-      user_id_type?: NonNullable<TaskAttachmentUploadPayload["params"]>["user_id_type"];
-    }
-  | {
-      task_guid: string;
-      file_url: string;
-      filename?: string;
-      user_id_type?: NonNullable<TaskAttachmentUploadPayload["params"]>["user_id_type"];
-    };
+export type UploadTaskAttachmentParams = {
+  task_guid: string;
+  file_path?: string;
+  file_url?: string;
+  filename?: string;
+  user_id_type?: NonNullable<TaskAttachmentUploadPayload["params"]>["user_id_type"];
+};
 
 export type ListTaskAttachmentsParams = {
   task_guid: NonNullable<TaskAttachmentListPayload["params"]>["resource_id"];
@@ -519,23 +514,19 @@ export const RemoveTasklistMembersSchema = Type.Object({
   ),
 });
 
-export const UploadTaskAttachmentSchema = Type.Union([
-  Type.Object({
-    task_guid: Type.String({ description: "Task GUID to upload attachment to" }),
-    file_path: Type.String({ description: "Local file path on the OpenClaw host" }),
-    user_id_type: Type.Optional(
-      Type.String({ description: "User ID type for returned uploader" }),
-    ),
-  }),
-  Type.Object({
-    task_guid: Type.String({ description: "Task GUID to upload attachment to" }),
-    file_url: Type.String({ description: "Remote file URL to download and upload" }),
-    filename: Type.Optional(Type.String({ description: "Override filename for uploaded attachment" })),
-    user_id_type: Type.Optional(
-      Type.String({ description: "User ID type for returned uploader" }),
-    ),
-  }),
-]);
+export const UploadTaskAttachmentSchema = Type.Object({
+  task_guid: Type.String({ description: "Task GUID to upload attachment to" }),
+  file_path: Type.Optional(
+    Type.String({ description: "Local file path on the OpenClaw host (provide either file_path or file_url)" }),
+  ),
+  file_url: Type.Optional(
+    Type.String({ description: "Remote file URL to download and upload (provide either file_path or file_url)" }),
+  ),
+  filename: Type.Optional(Type.String({ description: "Override filename for uploaded attachment (only with file_url)" })),
+  user_id_type: Type.Optional(
+    Type.String({ description: "User ID type for returned uploader" }),
+  ),
+});
 
 export const ListTaskAttachmentsSchema = Type.Object({
   task_guid: Type.String({ description: "Task GUID to list attachments for" }),

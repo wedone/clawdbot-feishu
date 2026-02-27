@@ -553,13 +553,15 @@ export async function uploadTaskAttachment(
   let tempCleanup: (() => Promise<void>) | undefined;
   let filePath: string;
 
-  if ("file_path" in params) {
+  if (params.file_path) {
     filePath = params.file_path;
     await ensureUploadableLocalFile(filePath, maxBytes);
-  } else {
+  } else if (params.file_url) {
     const download = await downloadToTempFile(params.file_url, params.filename, maxBytes);
     filePath = download.tempPath;
     tempCleanup = download.cleanup;
+  } else {
+    throw new Error("Either file_path or file_url is required");
   }
 
   try {
