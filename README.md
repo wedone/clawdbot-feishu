@@ -27,20 +27,45 @@ openclaw plugins install @m1heng-clawd/feishu
 > [!IMPORTANT]
 > **Windows Troubleshooting (`spawn npm ENOENT`)**
 >
-> If `openclaw plugins install` fails, install manually:
+> If `openclaw plugins install` fails, install manually with the latest tarball:
 >
 > ```bash
-> # 1. Download the package
-> curl -O https://registry.npmjs.org/@m1heng-clawd/feishu/-/feishu-0.1.3.tgz
+> # Option A (recommended): download latest package tarball
+> npm pack @m1heng-clawd/feishu
+> openclaw plugins install ./m1heng-clawd-feishu-<version>.tgz
+> ```
 >
-> # 2. Install from local file
-> openclaw plugins install ./feishu-0.1.3.tgz
+> ```bash
+> # Option B (keep curl flow): resolve latest tarball URL, then download/install
+> TARBALL_URL="$(npm view @m1heng-clawd/feishu dist.tarball)"
+> curl -L -o feishu-latest.tgz "$TARBALL_URL"
+> openclaw plugins install ./feishu-latest.tgz
+> ```
+>
+> ```powershell
+> # Windows PowerShell (Option B)
+> $tarball = npm view @m1heng-clawd/feishu dist.tarball
+> curl.exe -L $tarball -o feishu-latest.tgz
+> openclaw plugins install .\feishu-latest.tgz
+> ```
+>
+> ```bash
+> # Option C (no npm command): use URL template with latest version from npm Versions tab
+> # https://www.npmjs.com/package/@m1heng-clawd/feishu?activeTab=versions
+> curl -L -o feishu-latest.tgz https://registry.npmjs.org/@m1heng-clawd/feishu/-/feishu-<version>.tgz
+> openclaw plugins install ./feishu-latest.tgz
 > ```
 
 ### Upgrade
 
 ```bash
 openclaw plugins update feishu
+```
+
+Check installed version:
+
+```bash
+openclaw plugins list | rg -i feishu
 ```
 
 ### Configuration
@@ -478,20 +503,45 @@ openclaw plugins install @m1heng-clawd/feishu
 > [!IMPORTANT]
 > **Windows 排错（`spawn npm ENOENT`）**
 >
-> 如果 `openclaw plugins install` 失败，可以手动安装：
+> 如果 `openclaw plugins install` 失败，可通过最新 tarball 手动安装：
 >
 > ```bash
-> # 1. 下载插件包
-> curl -O https://registry.npmjs.org/@m1heng-clawd/feishu/-/feishu-0.1.3.tgz
+> # 方案 A（推荐）：下载最新插件 tarball
+> npm pack @m1heng-clawd/feishu
+> openclaw plugins install ./m1heng-clawd-feishu-<version>.tgz
+> ```
 >
-> # 2. 从本地安装
-> openclaw plugins install ./feishu-0.1.3.tgz
+> ```bash
+> # 方案 B（保留 curl 路径）：先解析最新 tarball 地址，再下载安装
+> TARBALL_URL="$(npm view @m1heng-clawd/feishu dist.tarball)"
+> curl -L -o feishu-latest.tgz "$TARBALL_URL"
+> openclaw plugins install ./feishu-latest.tgz
+> ```
+>
+> ```powershell
+> # Windows PowerShell（方案 B）
+> $tarball = npm view @m1heng-clawd/feishu dist.tarball
+> curl.exe -L $tarball -o feishu-latest.tgz
+> openclaw plugins install .\feishu-latest.tgz
+> ```
+>
+> ```bash
+> # 方案 C（无 npm 命令）：先在 npm Versions 页查到最新版本号，再套用 URL 模板
+> # https://www.npmjs.com/package/@m1heng-clawd/feishu?activeTab=versions
+> curl -L -o feishu-latest.tgz https://registry.npmjs.org/@m1heng-clawd/feishu/-/feishu-<version>.tgz
+> openclaw plugins install ./feishu-latest.tgz
 > ```
 
 ### 升级
 
 ```bash
 openclaw plugins update feishu
+```
+
+查看已安装版本：
+
+```bash
+openclaw plugins list | rg -i feishu
 ```
 
 ### 配置
