@@ -53,6 +53,7 @@ function extractFirstUrl(raw: string): string | undefined {
   return urlMatch?.[0];
 }
 
+
 function extractPermissionError(err: unknown): PermissionError | null {
   if (!err || typeof err !== "object") return null;
 
@@ -254,9 +255,7 @@ async function resolveFeishuSenderName(params: {
 
     const name: string | undefined =
       res?.data?.user?.name ||
-      res?.data?.user?.display_name ||
-      res?.data?.user?.nickname ||
-      res?.data?.user?.en_name;
+      res?.data?.user?.nickname;
 
     if (name && typeof name === "string") {
       senderNameCache.set(senderOpenId, { name, expireAt: now + SENDER_NAME_TTL_MS });
@@ -281,6 +280,67 @@ async function resolveFeishuSenderName(params: {
 // Cache group bot counts for command mention bypass policy checks.
 const GROUP_BOT_COUNT_TTL_MS = 10 * 60 * 1000;
 const groupBotCountCache = new Map<string, { count: number; expireAt: number }>();
+// Fallback flush only for standalone forwarded messages.
+// Quote-reply merging should rely on parent_id relation instead of time windows.
+const FORWARDED_COALESCE_WINDOW_MS = 1500;
+const FORWARDED_COMPANION_TTL_MS = 20 * 1000;
+type PendingForwardedDispatchEntry = {
+  token: string;
+  timer: ReturnType<typeof setTimeout>;
+  content: string;
+  messageKeys: Set<string>;
+};
+const pendingForwardedDispatch = new Map<string, PendingForwardedDispatchEntry>();
+const pendingForwardedDispatchByMessageId = new Map<string, string>();
+const recentForwardedCompanionReplies = new Map<string, number>();
+
+function getForwardedKey(params: {
+  accountId: string;
+  chatId: string;
+  forwardedMessageId: string;
+}): string {
+  return `${params.accountId}:${params.chatId}:${params.forwardedMessageId}`;
+}
+
+function clearPendingForwardedDispatchEntry(dispatchKey: string, entry: PendingForwardedDispatchEntry): void {
+  clearTimeout(entry.timer);
+  pendingForwardedDispatch.delete(dispatchKey);
+  for (const key of entry.messageKeys) {
+    pendingForwardedDispatchByMessageId.delete(key);
+  }
+}
+
+function markForwardedCompanionReply(params: {
+  accountId: string;
+  chatId: string;
+  forwardedMessageId: string;
+}): void {
+  const now = Date.now();
+  for (const [key, expireAt] of recentForwardedCompanionReplies) {
+    if (expireAt <= now) recentForwardedCompanionReplies.delete(key);
+  }
+  recentForwardedCompanionReplies.set(
+    getForwardedKey(params),
+    now + FORWARDED_COMPANION_TTL_MS,
+  );
+}
+
+function consumeForwardedCompanionReply(params: {
+  accountId: string;
+  chatId: string;
+  forwardedMessageId: string;
+}): boolean {
+  const key = getForwardedKey(params);
+  const now = Date.now();
+  const expireAt = recentForwardedCompanionReplies.get(key);
+  if (!expireAt) return false;
+  if (expireAt <= now) {
+    recentForwardedCompanionReplies.delete(key);
+    return false;
+  }
+  recentForwardedCompanionReplies.delete(key);
+  return true;
+}
 
 async function resolveFeishuGroupBotCount(params: {
   account: ResolvedFeishuAccount;
@@ -354,6 +414,10 @@ export type FeishuBotAddedEvent = {
   operator_tenant_key?: string;
 };
 
+function isForwardedMessageType(messageType: string): boolean {
+  return messageType === "forwarded" || messageType === "merged_forwarded" || messageType === "merge_forward";
+}
+
 function parseMessageContent(content: string, messageType: string): string {
   try {
     const parsed = JSON.parse(content);
@@ -368,6 +432,34 @@ function parseMessageContent(content: string, messageType: string): string {
     }
     if (["image", "file", "audio", "video", "sticker"].includes(normalizedMessageType)) {
       return inferPlaceholder(normalizedMessageType);
+    }
+    // Handle forwarded messages (single message forwarded)
+    if (messageType === "forwarded") {
+      const senderName = parsed.sender_name || parsed.sender?.name || "unknown";
+      const text = parsed.text || parsed.title || "";
+      return text ? `[Forwarded from ${senderName}]: ${text.substring(0, 100)}` : `[Forwarded from ${senderName}]`;
+    }
+    // Handle merged_forwarded messages (multiple messages merged)
+    // Note: Feishu uses "merge_forward" for merged forwarded messages
+    if (messageType === "merged_forwarded" || messageType === "merge_forward") {
+      const messageCount = parsed.message_count || parsed.messages?.length || 0;
+      const senderNames = parsed.messages
+        ?.map((m: any) => m.sender_name || m.sender?.name)
+        .filter(Boolean)
+        .join(", ") || "unknown";
+      // Extract preview of first few messages
+      let preview = "";
+      if (parsed.messages && parsed.messages.length > 0) {
+        const previews = parsed.messages
+          .slice(0, 3)
+          .map((m: any) => m.text || m.title || "")
+          .filter(Boolean)
+          .map((t: string) => t.substring(0, 50));
+        if (previews.length > 0) {
+          preview = `\n└ ${previews.join("\n└ ")}`;
+        }
+      }
+      return `[Merged forward (${messageCount} messages), from: ${senderNames}]${preview}`;
     }
     return content;
   } catch {
@@ -502,12 +594,12 @@ function parsePostContent(content: string): {
     }
 
     return {
-      textContent: textContent.trim() || "[富文本消息]",
+      textContent: textContent.trim() || "[Rich text message]",
       imageKeys,
       mentionIds,
     };
   } catch {
-    return { textContent: "[富文本消息]", imageKeys: [], mentionIds: [] };
+    return { textContent: "[Rich text message]", imageKeys: [], mentionIds: [] };
   }
 }
 
@@ -763,8 +855,9 @@ export async function handleFeishuMessage(params: {
   runtime?: RuntimeEnv;
   chatHistories?: Map<string, HistoryEntry[]>;
   accountId?: string;
+  replyToMessageIdOverride?: string;
 }): Promise<void> {
-  const { cfg, event, botOpenId, runtime, chatHistories, accountId } = params;
+  const { cfg, event, botOpenId, runtime, chatHistories, accountId, replyToMessageIdOverride } = params;
 
   // Resolve account with merged config
   const account = resolveFeishuAccount({ cfg, accountId });
@@ -782,6 +875,139 @@ export async function handleFeishuMessage(params: {
   }
 
   let ctx = parseFeishuMessageEvent(event, botOpenId);
+
+  const messageType = event.message.message_type;
+  const isForwardedInbound = isForwardedMessageType(messageType);
+  const forwardedDispatchKey = getForwardedKey({
+    accountId: account.accountId,
+    chatId: ctx.chatId,
+    forwardedMessageId: ctx.messageId,
+  });
+  if (!isForwardedInbound && ctx.parentId) {
+    markForwardedCompanionReply({
+      accountId: account.accountId,
+      chatId: ctx.chatId,
+      forwardedMessageId: ctx.parentId,
+    });
+  }
+
+  // For forwarded/merged_forwarded messages, fetch full message details via API
+  // Note: Feishu uses "merge_forward" for merged forwarded messages
+  if (isForwardedInbound) {
+    if (
+      consumeForwardedCompanionReply({
+        accountId: account.accountId,
+        chatId: ctx.chatId,
+        forwardedMessageId: ctx.messageId,
+      })
+    ) {
+      log(
+        `feishu[${account.accountId}]: skipping companion forwarded message ${ctx.messageId} (covered by parent reply)`,
+      );
+      return;
+    }
+    try {
+      const fullMessage = await getMessageFeishu({
+        cfg,
+        messageId,
+        accountId: account.accountId,
+      });
+      if (fullMessage?.content) {
+        // Use the already-parsed content from getMessageFeishu (includes all child messages for merge_forward)
+        ctx = { ...ctx, content: fullMessage.content };
+      }
+    } catch (err) {
+      log(`feishu: failed to fetch forwarded message details: ${err}`);
+    }
+    // Handle race: parent-reply may arrive and be processed while we're awaiting getMessageFeishu above.
+    // In that case, do not enqueue deferred forwarded flush again.
+    if (
+      consumeForwardedCompanionReply({
+        accountId: account.accountId,
+        chatId: ctx.chatId,
+        forwardedMessageId: ctx.messageId,
+      })
+    ) {
+      log(
+        `feishu[${account.accountId}]: skipping companion forwarded message ${ctx.messageId} (covered during fetch)`,
+      );
+      return;
+    }
+    const existing = pendingForwardedDispatch.get(forwardedDispatchKey);
+    if (existing) clearPendingForwardedDispatchEntry(forwardedDispatchKey, existing);
+    const mergedMessageKeys = new Set<string>([forwardedDispatchKey]);
+    const token = `${ctx.messageId}:${Date.now()}`;
+    const deferredMessageIdBase = ctx.messageId;
+    const timer = setTimeout(() => {
+      const current = pendingForwardedDispatch.get(forwardedDispatchKey);
+      if (!current || current.token !== token) return;
+      clearPendingForwardedDispatchEntry(forwardedDispatchKey, current);
+
+      const syntheticEvent: FeishuMessageEvent = {
+        ...event,
+        message: {
+          ...event.message,
+          message_id: `${deferredMessageIdBase}:forwarded-flush:${Date.now()}`,
+          message_type: "text",
+          content: JSON.stringify({ text: current.content }),
+        },
+      };
+
+      void handleFeishuMessage({
+        cfg,
+        event: syntheticEvent,
+        botOpenId,
+        runtime,
+        chatHistories,
+        accountId: account.accountId,
+        replyToMessageIdOverride: deferredMessageIdBase,
+      }).catch((err) => {
+        error(`feishu[${account.accountId}]: failed deferred forwarded dispatch: ${String(err)}`);
+      });
+    }, FORWARDED_COALESCE_WINDOW_MS);
+
+    pendingForwardedDispatch.set(forwardedDispatchKey, {
+      token,
+      timer,
+      content: ctx.content,
+      messageKeys: mergedMessageKeys,
+    });
+    for (const messageKey of mergedMessageKeys) {
+      pendingForwardedDispatchByMessageId.set(messageKey, forwardedDispatchKey);
+    }
+    log(
+      `feishu[${account.accountId}]: queued forwarded message ${ctx.messageId} for deferred dispatch`,
+    );
+    return;
+  } else {
+    let pending: PendingForwardedDispatchEntry | undefined;
+    let pendingDispatchKey: string | undefined;
+    if (ctx.parentId) {
+      const parentMessageKey = getForwardedKey({
+        accountId: account.accountId,
+        chatId: ctx.chatId,
+        forwardedMessageId: ctx.parentId,
+      });
+      const parentDispatchKey = pendingForwardedDispatchByMessageId.get(parentMessageKey);
+      if (parentDispatchKey) {
+        pendingDispatchKey = parentDispatchKey;
+        pending = pendingForwardedDispatch.get(parentDispatchKey);
+      } else {
+        pendingForwardedDispatchByMessageId.delete(parentMessageKey);
+      }
+    }
+    if (pending && pendingDispatchKey) {
+      clearPendingForwardedDispatchEntry(pendingDispatchKey, pending);
+      ctx = {
+        ...ctx,
+        content: `${pending.content}\n\n---\n\n${ctx.content}`,
+      };
+      log(
+        `feishu[${account.accountId}]: merged pending forwarded context into follow-up ${ctx.messageId}`,
+      );
+    }
+  }
+
   const isGroup = ctx.chatType === "group";
 
   // Resolve sender display name (best-effort) so the agent can attribute messages correctly.
@@ -1120,7 +1346,7 @@ export async function handleFeishuMessage(params: {
         const quotedMsg = await getMessageFeishu({ cfg, messageId: ctx.parentId, accountId: account.accountId });
         if (quotedMsg) {
           quotedContent = quotedMsg.content;
-          log(`feishu[${account.accountId}]: fetched quoted message: ${quotedContent?.slice(0, 100)}`);
+          log(`feishu[${account.accountId}]: fetched quoted message ${ctx.parentId}`);
         }
       } catch (err) {
         log(`feishu[${account.accountId}]: failed to fetch quoted message: ${String(err)}`);
@@ -1129,11 +1355,22 @@ export async function handleFeishuMessage(params: {
 
     const envelopeOptions = core.channel.reply.resolveEnvelopeFormatOptions(cfg);
 
-    // Build message body with quoted content if available
-    let messageBody = ctx.content;
+    // Build core message content with quoted content if available.
+    // Keep this separate from speaker/system prefixes so RawBody preserves quote context.
+    let rawBody = ctx.content;
     if (quotedContent) {
-      messageBody = `[Replying to: "${quotedContent}"]\n\n${ctx.content}`;
+      const normalizedQuoted = quotedContent.replace(/\s+/g, " ").trim();
+      const normalizedBody = ctx.content.replace(/\s+/g, " ").trim();
+      const quoteAlreadyInBody =
+        normalizedQuoted.length > 16 && normalizedBody.length > 0 && normalizedBody.includes(normalizedQuoted);
+      if (quoteAlreadyInBody) {
+        log(`feishu[${account.accountId}]: skip duplicate quote merge for message ${ctx.messageId}`);
+      } else {
+        rawBody = `[Replying to: "${quotedContent}"]\n\n${ctx.content}`;
+      }
     }
+
+    let messageBody = rawBody;
 
     // Include a readable speaker label so the model can attribute instructions.
     // (DMs already have per-sender sessions, but the prefix is still useful for clarity.)
@@ -1147,6 +1384,7 @@ export async function handleFeishuMessage(params: {
     }
 
     const envelopeFrom = isGroup ? `${ctx.chatId}:${ctx.senderOpenId}` : ctx.senderOpenId;
+    const replyToMessageId = replyToMessageIdOverride ?? ctx.messageId;
 
     // If there's a permission error, dispatch a separate notification first
     if (permissionErrorForAgent) {
@@ -1189,7 +1427,7 @@ export async function handleFeishuMessage(params: {
           agentId: route.agentId,
           runtime: runtime as RuntimeEnv,
           chatId: ctx.chatId,
-          replyToMessageId: ctx.messageId,
+          replyToMessageId,
           accountId: account.accountId,
         });
 
@@ -1245,8 +1483,8 @@ export async function handleFeishuMessage(params: {
 
     const ctxPayload = core.channel.reply.finalizeInboundContext({
       Body: combinedBody,
-      RawBody: ctx.content,
-      CommandBody: ctx.content,
+      RawBody: rawBody,
+      CommandBody: rawBody,
       From: feishuFrom,
       To: feishuTo,
       SessionKey: route.sessionKey,
@@ -1272,7 +1510,7 @@ export async function handleFeishuMessage(params: {
       agentId: route.agentId,
       runtime: runtime as RuntimeEnv,
       chatId: ctx.chatId,
-      replyToMessageId: ctx.messageId,
+      replyToMessageId,
       mentionTargets: ctx.mentionTargets,
       accountId: account.accountId,
     });

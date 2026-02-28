@@ -135,6 +135,57 @@ describe("parseFeishuMessageEvent", () => {
     expect(ctx.contentType).toBe("media");
     expect(ctx.content).toBe("<media:video>");
   });
+
+  it("parses forwarded message preview content", () => {
+    const event: FeishuMessageEvent = {
+      sender: {
+        sender_id: {
+          open_id: "ou_sender",
+          user_id: "u_sender",
+        },
+      },
+      message: {
+        message_id: "om_forward_1",
+        chat_id: "oc_dm",
+        chat_type: "p2p",
+        message_type: "forwarded",
+        content: JSON.stringify({
+          sender_name: "Alice",
+          text: "hello forwarded",
+        }),
+      },
+    };
+
+    const ctx = parseFeishuMessageEvent(event, botOpenId);
+    expect(ctx.content).toBe("[Forwarded from Alice]: hello forwarded");
+  });
+
+  it("parses merge_forward preview content", () => {
+    const event: FeishuMessageEvent = {
+      sender: {
+        sender_id: {
+          open_id: "ou_sender",
+          user_id: "u_sender",
+        },
+      },
+      message: {
+        message_id: "om_merge_forward_1",
+        chat_id: "oc_group",
+        chat_type: "group",
+        message_type: "merge_forward",
+        content: JSON.stringify({
+          message_count: 2,
+          messages: [
+            { sender_name: "Alice", text: "first line" },
+            { sender_name: "Bob", title: "second line" },
+          ],
+        }),
+      },
+    };
+
+    const ctx = parseFeishuMessageEvent(event, botOpenId);
+    expect(ctx.content).toBe("[Merged forward (2 messages), from: Alice, Bob]\n└ first line\n└ second line");
+  });
 });
 
 describe("normalizeFeishuInboundMessageType", () => {
