@@ -418,26 +418,34 @@ function isForwardedMessageType(messageType: string): boolean {
   return messageType === "forwarded" || messageType === "merged_forwarded" || messageType === "merge_forward";
 }
 
-function parseMessageContent(content: string, messageType: string): string {
+type ParsedFeishuMessageContent = {
+  text: string;
+  placeholder?: string;
+  rawPayload?: string;
+};
+
+function parseMessageContent(content: string, messageType: string): ParsedFeishuMessageContent {
   try {
     const parsed = JSON.parse(content);
     const normalizedMessageType = normalizeFeishuInboundMessageType(messageType);
     if (normalizedMessageType === "text") {
-      return parsed.text || "";
+      return { text: parsed.text || "", rawPayload: content };
     }
     if (normalizedMessageType === "post") {
       // Extract text content from rich text post
       const { textContent } = parsePostContent(content);
-      return textContent;
+      return { text: textContent, rawPayload: content };
     }
     if (["image", "file", "audio", "video", "sticker"].includes(normalizedMessageType)) {
-      return inferPlaceholder(normalizedMessageType);
+      const ph = inferPlaceholder(normalizedMessageType);
+      return { text: ph, placeholder: ph, rawPayload: content };
     }
     // Handle forwarded messages (single message forwarded)
     if (messageType === "forwarded") {
       const senderName = parsed.sender_name || parsed.sender?.name || "unknown";
       const text = parsed.text || parsed.title || "";
-      return text ? `[Forwarded from ${senderName}]: ${text.substring(0, 100)}` : `[Forwarded from ${senderName}]`;
+      const forwarded = text ? `[Forwarded from ${senderName}]: ${text.substring(0, 100)}` : `[Forwarded from ${senderName}]`;
+      return { text: forwarded, rawPayload: content };
     }
     // Handle merged_forwarded messages (multiple messages merged)
     // Note: Feishu uses "merge_forward" for merged forwarded messages
@@ -459,11 +467,11 @@ function parseMessageContent(content: string, messageType: string): string {
           preview = `\n└ ${previews.join("\n└ ")}`;
         }
       }
-      return `[Merged forward (${messageCount} messages), from: ${senderNames}]${preview}`;
+      return { text: `[Merged forward (${messageCount} messages), from: ${senderNames}]${preview}`, rawPayload: content };
     }
-    return content;
+    return { text: content, rawPayload: content };
   } catch {
-    return content;
+    return { text: content, rawPayload: content };
   }
 }
 
@@ -603,6 +611,27 @@ function parsePostContent(content: string): {
   }
 }
 
+function isGenericMimeType(mime?: string): boolean {
+  if (!mime) return true;
+  const normalized = mime.split(";")[0]?.trim().toLowerCase();
+  return !normalized || normalized === "application/octet-stream";
+}
+
+function resolveFallbackMimeType(messageType: string): string | undefined {
+  switch (messageType) {
+    case "audio":
+      // Feishu voice messages are typically opus in ogg container.
+      return "audio/ogg; codecs=opus";
+    case "video":
+      return "video/mp4";
+    case "image":
+    case "post":
+      return "image/jpeg";
+    default:
+      return undefined;
+  }
+}
+
 /**
  * Infer placeholder text based on message type.
  */
@@ -670,8 +699,12 @@ async function resolveFeishuMediaList(params: {
         });
 
         let contentType = result.contentType;
-        if (!contentType) {
-          contentType = await core.media.detectMime({ buffer: result.buffer });
+        if (!contentType || isGenericMimeType(contentType)) {
+          contentType =
+            (await core.media.detectMime({
+              buffer: result.buffer,
+              headerMime: contentType,
+            })) ?? resolveFallbackMimeType("image");
         }
 
         const saved = await core.channel.media.saveMediaBuffer(
@@ -726,9 +759,17 @@ async function resolveFeishuMediaList(params: {
     contentType = result.contentType;
     fileName = result.fileName || mediaKeys.fileName;
 
-    // Detect mime type if not provided
-    if (!contentType) {
-      contentType = await core.media.detectMime({ buffer });
+    // Detect MIME type and apply message-type fallback when needed.
+    if (!contentType || isGenericMimeType(contentType)) {
+      contentType =
+        (await core.media.detectMime({
+          buffer,
+          headerMime: contentType,
+          filePath: fileName,
+        })) ?? resolveFallbackMimeType(normalizedMessageType);
+    }
+    if (isGenericMimeType(contentType)) {
+      contentType = resolveFallbackMimeType(normalizedMessageType) ?? contentType;
     }
 
     // Save to disk using core's saveMediaBuffer
@@ -814,11 +855,11 @@ export function parseFeishuMessageEvent(
 ): FeishuMessageContext {
   const parsedPost =
     event.message.message_type === "post" ? parsePostContent(event.message.content) : undefined;
-  const rawContent = parseMessageContent(event.message.content, event.message.message_type);
+  const parsedContent = parseMessageContent(event.message.content, event.message.message_type);
   const mentionedBot = checkBotMentioned(event, botOpenId, parsedPost?.mentionIds ?? []);
   const hasAnyMention =
     (event.message.mentions?.length ?? 0) > 0 || (parsedPost?.mentionIds.length ?? 0) > 0;
-  const content = stripBotMention(rawContent, event.message.mentions);
+  const content = stripBotMention(parsedContent.text, event.message.mentions);
 
   const ctx: FeishuMessageContext = {
     chatId: event.message.chat_id,
@@ -831,6 +872,8 @@ export function parseFeishuMessageEvent(
     parentId: event.message.parent_id || undefined,
     content,
     contentType: event.message.message_type,
+    placeholder: parsedContent.placeholder,
+    rawPayload: parsedContent.rawPayload,
     hasAnyMention,
   };
 
