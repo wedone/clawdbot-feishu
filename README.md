@@ -111,6 +111,8 @@ openclaw plugins list | rg -i feishu
 | `task:tasklist:read` | `feishu_tasklist_get`, `feishu_tasklist_list` | Get/list tasklists |
 | `task:comment:read` | `feishu_task_comment_list`, `feishu_task_comment_get` | List/get task comments |
 | `task:attachment:read` | `feishu_task_attachment_list`, `feishu_task_attachment_get` | List/get task attachments |
+| `im:chat.announcement:read` | `feishu_chat` | Read group announcement |
+| `im:chat:readonly` | `feishu_chat` | Get chat info, check bot membership |
 
 **Read-write** (optional, for create/edit/delete operations):
 
@@ -126,6 +128,9 @@ openclaw plugins list | rg -i feishu
 | `task:comment:write` | `feishu_task_comment_create`, `feishu_task_comment_update`, `feishu_task_comment_delete` | Create/update/delete task comments |
 | `task:attachment:write` | `feishu_task_attachment_upload`, `feishu_task_attachment_delete` | Upload/delete task attachments |
 | `im:message.urgent` | `feishu_urgent` | Send urgent (buzz) notifications via app (in-app). Use `sms` and `phone` variants (`im:message.urgent:sms`, `im:message.urgent:phone`) for SMS and voice call. |
+| `im:chat.announcement` | `feishu_chat` | Write/update group announcement |
+| `im:chat` | `feishu_chat` | Create and delete group chats |
+| `im:chat.members` | `feishu_chat` | Add members to group chats |
 
 > Task scope names may vary slightly in Feishu console UI. If needed, search for Task / Tasklist / Comment / Attachment-related permissions and grant read/write accordingly.
 
@@ -412,6 +417,14 @@ https://your-domain.com/feishu/events
 
 When enabled, each DM user automatically gets their own isolated agent instance with a dedicated workspace. This provides complete isolation including separate conversation history, memory (MEMORY.md), and workspace files.
 
+#### Chat Management Limitations ⚠️
+
+> **Important:** `delete_chat` requires the bot to be the **group owner**. If the bot was added to an existing chat as a member (not the owner), it cannot disband it.
+>
+> If you need to disband a chat that the bot does not own:
+> 1. The **group owner** transfers ownership to the bot first, or
+> 2. The group owner disbands the group directly in the Feishu app.
+
 ```yaml
 channels:
   feishu:
@@ -464,6 +477,8 @@ session:
 - **Drive tools**: List folders, get file info, create folders, move/delete files
 - **Bitable tools**: Manage bitable (多维表格) fields and records (read/create/update/delete), supports both `/base/` and `/wiki/` URLs
 - **Task tools**: Create, get details, update, and delete tasks via Feishu Task v2 API
+- **Chat tools**: Read and write group announcements, create group chats, add members, check bot membership, delete chats (`feishu_chat`)
+- **Urgent notification tools**: Send buzz/urgent notifications (app, SMS, voice call) via `feishu_urgent`
 - **@mention forwarding**: When you @mention someone in your message, the bot's reply will automatically @mention them too
 - **Permission error notification**: When the bot encounters a Feishu API permission error, it automatically notifies the user with the permission grant URL
 - **Dynamic agent creation**: Each DM user can have their own isolated agent instance with dedicated workspace (optional)
@@ -612,6 +627,8 @@ openclaw plugins list | rg -i feishu
 | `task:tasklist:read` | `feishu_tasklist_get`, `feishu_tasklist_list` | 获取/列出任务清单（tasklists） |
 | `task:comment:read` | `feishu_task_comment_list`, `feishu_task_comment_get` | 列出/获取任务评论 |
 | `task:attachment:read` | `feishu_task_attachment_list`, `feishu_task_attachment_get` | 列出/获取任务附件 |
+| `im:chat.announcement:read` | `feishu_chat` | 读取群公告 |
+| `im:chat:readonly` | `feishu_chat` | 获取群信息、检查机器人是否在群内 |
 
 **读写权限**（可选，用于创建/编辑/删除操作）：
 
@@ -627,6 +644,9 @@ openclaw plugins list | rg -i feishu
 | `task:comment:write` | `feishu_task_comment_create`, `feishu_task_comment_update`, `feishu_task_comment_delete` | 创建/更新/删除任务评论 |
 | `task:attachment:write` | `feishu_task_attachment_upload`, `feishu_task_attachment_delete` | 上传/删除任务附件 |
 | `im:message.urgent` | `feishu_urgent` | 发送应用内加急（buzz）通知。使用 `sms` 和 `phone` 变体（`im:message.urgent:sms`、`im:message.urgent:phone`）可发送短信和语音电话加急。 |
+| `im:chat.announcement` | `feishu_chat` | 写入/更新群公告 |
+| `im:chat` | `feishu_chat` | 创建和删除群聊 |
+| `im:chat.members` | `feishu_chat` | 向群聊添加成员 |
 
 > 飞书控制台中任务权限的显示名称可能略有差异，必要时可按关键字 `task` / `tasklist` / `comment` / `attachment` 搜索并授予对应读写权限。
 
@@ -908,6 +928,14 @@ https://your-domain.com/feishu/events
 | `raw` | 始终纯文本，表格转为 ASCII |
 | `card` | 始终使用卡片，支持语法高亮、表格、链接等 |
 
+#### 群管理限制 ⚠️
+
+> **重要提示：** `delete_chat` 需要机器人是该群的**群主**。如果机器人是以成员身份加入现有群聊（非群主），则无法解散该群聊。
+>
+> 如需解散机器人不拥有的群聊：
+> 1. **群主**将群主权限转让给机器人，或
+> 2. 由群主直接在飞书客户端解散群聊。
+
 #### 动态 Agent 创建（多用户 Workspace 隔离）
 
 启用后，每个私聊用户会自动获得独立的 agent 实例和专属 workspace。这提供完整的隔离，包括独立的对话历史、记忆（MEMORY.md）和工作区文件。
@@ -964,6 +992,8 @@ session:
 - **云空间工具**：列出文件夹、获取文件信息、创建文件夹、移动/删除文件
 - **多维表格工具**：支持多维表格字段与记录的读取/创建/更新/删除，支持 `/base/` 和 `/wiki/` 两种链接格式
 - **任务工具**：基于 Task v2 API 支持任务创建、获取详情、更新和删除
+- **群聊工具**：读写群公告、创建群聊、添加成员、检查机器人是否在群内、删除群聊（`feishu_chat`）
+- **加急通知工具**：发送应用内加急（buzz）、短信、语音电话加急通知（`feishu_urgent`）
 - **@ 转发功能**：在消息中 @ 某人，机器人的回复会自动 @ 该用户
 - **权限错误提示**：当机器人遇到飞书 API 权限错误时，会自动通知用户并提供权限授权链接
 - **动态 Agent 创建**：每个私聊用户可拥有独立的 agent 实例和专属 workspace（可选）

@@ -5,6 +5,30 @@ import type { FeishuDriveParams } from "./schemas.js";
 type DriveMoveType = "doc" | "docx" | "sheet" | "bitable" | "folder" | "file" | "mindnote" | "slides";
 type DriveDeleteType = DriveMoveType | "shortcut";
 
+async function getFileType(client: DriveClient, fileToken: string): Promise<string> {
+  let pageToken: string | undefined;
+  
+  do {
+    const listRes = await runDriveApiCall("drive.file.list", () =>
+      client.drive.file.list({
+        params: pageToken ? { page_token: pageToken } : {},
+      }),
+    );
+
+    const file = listRes.data?.files?.find((f: any) => f.token === fileToken);
+    if (file) {
+      if (!file.type) {
+        throw new Error(`File found but no type for ${fileToken}. Please provide the 'type' parameter explicitly.`);
+      }
+      return file.type;
+    }
+    
+    pageToken = listRes.data?.next_page_token;
+  } while (pageToken);
+
+  throw new Error(`File not found: ${fileToken}. Please provide the 'type' parameter explicitly.`);
+}
+
 async function getRootFolderToken(client: DriveClient): Promise<string> {
   // Use generic HTTP client to call the root folder meta API
   // as it's not directly exposed in the SDK.
@@ -46,27 +70,32 @@ async function listFolder(client: DriveClient, folderToken?: string) {
 }
 
 async function getFileInfo(client: DriveClient, fileToken: string, folderToken?: string) {
-  // Use list with folder_token to find file info.
-  const res = await runDriveApiCall("drive.file.list", () =>
-    client.drive.file.list({
-      params: folderToken ? { folder_token: folderToken } : {},
-    }),
-  );
+  let pageToken: string | undefined;
 
-  const file = res.data?.files?.find((f) => f.token === fileToken);
-  if (!file) {
-    throw new Error(`File not found: ${fileToken}`);
-  }
+  do {
+    const res = await runDriveApiCall("drive.file.list", () =>
+      client.drive.file.list({
+        params: folderToken ? { folder_token: folderToken, page_token: pageToken } : { page_token: pageToken },
+      }),
+    );
 
-  return {
-    token: file.token,
-    name: file.name,
-    type: file.type,
-    url: file.url,
-    created_time: file.created_time,
-    modified_time: file.modified_time,
-    owner_id: file.owner_id,
-  };
+    const file = res.data?.files?.find((f: any) => f.token === fileToken);
+    if (file) {
+      return {
+        token: file.token,
+        name: file.name,
+        type: file.type,
+        url: file.url,
+        created_time: file.created_time,
+        modified_time: file.modified_time,
+        owner_id: file.owner_id,
+      };
+    }
+
+    pageToken = res.data?.next_page_token;
+  } while (pageToken);
+
+  throw new Error(`File not found: ${fileToken}`);
 }
 
 async function createFolder(client: DriveClient, name: string, folderToken?: string) {
@@ -119,12 +148,18 @@ async function moveFile(
   };
 }
 
-async function deleteFile(client: DriveClient, fileToken: string, type: string) {
+async function deleteFile(client: DriveClient, fileToken: string, type?: string) {
+  let effectiveType = type;
+
+  if (!effectiveType) {
+    effectiveType = await getFileType(client, fileToken);
+  }
+
   const res = await runDriveApiCall("drive.file.delete", () =>
     client.drive.file.delete({
       path: { file_token: fileToken },
       params: {
-        type: type as DriveDeleteType,
+        type: effectiveType as DriveDeleteType,
       },
     }),
   );
@@ -132,6 +167,7 @@ async function deleteFile(client: DriveClient, fileToken: string, type: string) 
   return {
     success: true,
     task_id: res.data?.task_id,
+    type_used: effectiveType,
   };
 }
 

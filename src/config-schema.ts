@@ -89,6 +89,8 @@ const FeishuToolsConfigSchema = z
     perm: z.boolean().optional(), // Permission management (default: false, sensitive)
     scopes: z.boolean().optional(), // App scopes diagnostic (default: true)
     task: z.boolean().optional(), // Task operations (default: true)
+    chat: z.boolean().optional(), // Chat management operations (default: true)
+    urgent: z.boolean().optional(), // Buzz/urgent notifications (default: true)
   })
   .strict()
   .optional();
