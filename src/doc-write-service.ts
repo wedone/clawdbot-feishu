@@ -1,6 +1,7 @@
 import type * as Lark from "@larksuiteoapi/node-sdk";
 import { Readable } from "stream";
 import { getFeishuRuntime } from "./runtime.js";
+import { getCurrentFeishuToolContext } from "./tools-common/tool-context.js";
 
 const BLOCK_TYPE_NAMES: Record<number, string> = {
   1: "Page",
@@ -572,6 +573,24 @@ export async function createDoc(
   });
   if (res.code !== 0) throw new Error(res.msg);
   const doc = res.data?.document;
+
+  // Auto-share with the requesting user so they can edit the document.
+  const senderOpenId = getCurrentFeishuToolContext()?.senderOpenId;
+  if (doc?.document_id && senderOpenId) {
+    try {
+      const permRes = await client.drive.permissionMember.create({
+        path: { token: doc.document_id },
+        params: { type: "docx", need_notification: false },
+        data: { member_type: "openid", member_id: senderOpenId, perm: "edit" },
+      });
+      if (permRes.code !== 0) {
+        console.warn(`[feishu_doc] Failed to auto-share doc ${doc.document_id}: ${permRes.msg}`);
+      }
+    } catch (err) {
+      console.warn(`[feishu_doc] Failed to auto-share doc ${doc.document_id}:`, err);
+    }
+  }
+
   return {
     document_id: doc?.document_id,
     title: doc?.title,

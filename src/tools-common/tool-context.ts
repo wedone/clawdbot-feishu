@@ -4,6 +4,7 @@ export type FeishuToolContext = {
   channel: "feishu";
   accountId: string;
   sessionKey?: string;
+  senderOpenId?: string;
 };
 
 const toolContextStorage = new AsyncLocalStorage<FeishuToolContext>();
