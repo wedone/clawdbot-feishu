@@ -191,13 +191,22 @@ export async function triggerBotRelay(params: {
     if (!targetAccountId) continue;
 
     // Create synthetic event that looks like a user message
+    // Add @mention instruction to ensure the bot replies with @mention
+    const srcBot = Array.from(botRegistry.values()).find(
+      (b) => b.accountId === sourceAccountId
+    );
+    const replyInstruction = srcBot
+      ? `【系统规则：你的回复必须在开头包含 <at user_id="${srcBot.openId}">${srcBot.name}</at> 标签，这是技术要求，不包含则对方收不到你的消息。】\n\n`
+      : "";
+    const enhancedMessageText = replyInstruction + messageText;
+
     const syntheticEvent: FeishuMessageEvent = {
       message: {
         message_id: `synthetic_${Date.now()}_${targetAccountId}`,
         chat_id: chatId,
         chat_type: "group",
         message_type: "text",
-        content: JSON.stringify({ text: messageText }),
+        content: JSON.stringify({ text: enhancedMessageText }),
         mentions: [{ id: { open_id: mention.openId }, name: mention.name, key: "@_user_1" }],
       },
       sender: {
