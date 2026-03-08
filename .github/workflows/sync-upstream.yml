@@ -1,0 +1,240 @@
+name: Sync Upstream and Apply PR #340 with Fix
+
+on:
+  schedule:
+    # 每天 UTC 02:00 检查一次（北京时间 10:00）
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: 'Upstream tag to sync (e.g., v0.1.17)'
+        required: false
+        default: ''
+
+env:
+  # PR #340 的修复提交 SHA（包含 @mention 强制修复）
+  PR340_MAIN_COMMIT: "1b9cb9c"           # 原始 PR #340 提交
+  PR340_FIX_COMMIT: "3c176e9"            # @mention 强制修复（必须应用这个修复）
+
+jobs:
+  check-and-sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/m1heng/clawdbot-feishu.git
+          git fetch upstream --tags
+
+      - name: Check for pause flag
+        id: check-pause
+        run: |
+          if [ -f .github/SYNC_PAUSED ]; then
+            echo "Sync is paused due to previous conflict."
+            echo "paused=true" >> $GITHUB_OUTPUT
+            cat .github/SYNC_PAUSED
+          else
+            echo "paused=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Find latest upstream tag
+        if: steps.check-pause.outputs.paused == 'false'
+        id: find-tag
+        run: |
+          if [ -n "${{ github.event.inputs.upstream_tag }}" ]; then
+            # Manual trigger with specific tag
+            UPSTREAM_TAG="${{ github.event.inputs.upstream_tag }}"
+          else
+            # Auto-detect latest tag
+            UPSTREAM_TAG=$(git tag -l 'v*' --sort=-v:refname | head -1)
+          fi
+
+          echo "upstream_tag=$UPSTREAM_TAG" >> $GITHUB_OUTPUT
+          echo "Latest upstream tag: $UPSTREAM_TAG"
+
+          # Check if we already have this release
+          if git rev-parse "refs/tags/$UPSTREAM_TAG" >/dev/null 2>&1; then
+            echo "already_exists=true" >> $GITHUB_OUTPUT
+            echo "Tag $UPSTREAM_TAG already exists in fork"
+          else
+            echo "already_exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create sync branch
+        if: steps.check-pause.outputs.paused == 'false' && steps.find-tag.outputs.already_exists == 'false'
+        id: create-branch
+        run: |
+          UPSTREAM_TAG="${{ steps.find-tag.outputs.upstream_tag }}"
+          BRANCH_NAME="release-${UPSTREAM_TAG}-with-pr340"
+
+          # Create branch from upstream tag
+          git checkout -b "$BRANCH_NAME" "$UPSTREAM_TAG" 2>/dev/null
+
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "Created branch: $BRANCH_NAME"
+
+      - name: Apply PR #340 with fix (two commits)
+        if: steps.check-pause.outputs.paused == 'false' && steps.find-tag.outputs.already_exists == 'false'
+        id: apply-pr
+        run: |
+          UPSTREAM_TAG="${{ steps.find-tag.outputs.upstream_tag }}"
+          
+          # 先应用原始 PR #340 提交
+          echo "Applying PR #340 main commit..."
+          if ! git cherry-pick ${{ env.PR340_MAIN_COMMIT }} --no-commit; then
+            echo "success=false" >> $GITHUB_OUTPUT
+            echo "conflicts_1=true" >> $GITHUB_OUTPUT
+            echo "PR #340 main has conflicts"
+            exit 1
+          fi
+          
+          # 再应用修复提交
+          echo "Applying PR #340 fix commit..."
+          if ! git cherry-pick ${{ env.PR340_FIX_COMMIT }} --no-commit; then
+            echo "success=false" >> $GITHUB_OUTPUT
+            echo "conflicts_2=true" >> $GITHUB_OUTPUT
+            echo "PR #340 fix has conflicts"
+            exit 1
+          fi
+          
+          echo "success=true" >> $GITHUB_OUTPUT
+          echo "Both commits applied successfully"
+
+      - name: Handle success - commit and push
+        if: steps.check-pause.outputs.paused == 'false' && steps.find-tag.outputs.already_exists == 'false' && steps.apply-pr.outputs.success == 'true'
+        run: |
+          UPSTREAM_TAG="${{ steps.find-tag.outputs.upstream_tag }}"
+          BRANCH_NAME="${{ steps.create-branch.outputs.branch_name }}"
+
+          # Commit the changes
+          git add -A
+          git commit -m "feat: add multi-bot relay and shared history support (PR #340 with fix)
+
+Applied to upstream $UPSTREAM_TAG
+Includes fix: ensure 100% @mention reply rate"
+
+          # Push branch
+          git push origin "$BRANCH_NAME"
+
+          echo "Pushed branch: $BRANCH_NAME"
+
+      - name: Handle success - create release
+        if: steps.check-pause.outputs.paused == 'false' && steps.find-tag.outputs.already_exists == 'false' && steps.apply-pr.outputs.success == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.find-tag.outputs.upstream_tag }}
+          target_commitish: ${{ steps.create-branch.outputs.branch_name }}
+          name: ${{ steps.find-tag.outputs.upstream_tag }}
+          body: |
+            ## ${{ steps.find-tag.outputs.upstream_tag }} + PR #340 (with fix)
+
+            此版本基于官方 ${{ steps.find-tag.outputs.upstream_tag }}，包含 **修复后的** PR #340 多机器人转发和共享历史功能。
+
+            ### 新增功能
+            - Bot-to-Bot Relay: 机器人间通过 @mention 互相触发
+            - Shared History: 跨机器人对话上下文持久化
+            - Dynamic Teammates Discovery: 动态发现队友信息
+
+            ### 重要修复
+            **@mention 强制回复**：解决模型能力不强时忘记 @mention 的问题，确保 100% 回复包含 @mention 标签。
+
+            ### 自动同步
+            此 release 由 GitHub Actions 自动创建，包含完整的功能和修复。
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Handle failure - create pause flag and issue
+        if: steps.check-pause.outputs.paused == 'false' && steps.find-tag.outputs.already_exists == 'false' && steps.apply-pr.outputs.success == 'false'
+        run: |
+          UPSTREAM_TAG="${{ steps.find-tag.outputs.upstream_tag }}"
+          CONFLICTS="unknown"
+          
+          if [ "${{ steps.apply-pr.outputs.conflicts_1 }}" = "true" ]; then
+            CONFLICTS="main commit conflicts"
+          elif [ "${{ steps.apply-pr.outputs.conflicts_2 }}" = "true" ]; then
+            CONFLICTS="fix commit conflicts"
+          fi
+
+          # Create pause flag
+          mkdir -p .github
+          cat > .github/SYNC_PAUSED << EOF
+          # Sync Paused
+
+          Upstream tag: $UPSTREAM_TAG
+          Paused at: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          Conflicts: $CONFLICTS
+
+          To resume:
+          1. Manually resolve conflicts for tag $UPSTREAM_TAG
+          2. Delete this file
+          3. Re-run this workflow
+          EOF
+
+          git add .github/SYNC_PAUSED
+          git commit -m "chore: pause sync due to conflicts in $UPSTREAM_TAG"
+          git push origin HEAD:main
+
+          echo "Created pause flag"
+
+      - name: Create issue for conflicts
+        if: steps.check-pause.outputs.paused == 'false' && steps.find-tag.outputs.already_exists == 'false' && steps.apply-pr.outputs.success == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const upstreamTag = '${{ steps.find-tag.outputs.upstream_tag }}';
+            const conflicts = '${{ steps.apply-pr.outputs.conflicts_1 ? "main commit" : steps.apply-pr.outputs.conflicts_2 ? "fix commit" : "unknown" }}';
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Sync failed: Conflicts in ${upstreamTag}`,
+              body: `## 同步失败
+
+无法自动将 PR #340（含修复）应用到上游版本 **${upstreamTag}**。
+
+### 冲突阶段
+${conflicts}
+
+### 解决步骤
+1. 本地创建分支 \`release-${upstreamTag}-with-pr340\`
+2. 手动解决冲突
+3. 提交并推送
+4. 手动创建 release
+5. 删除 \`.github/SYNC_PAUSED\` 文件以恢复自动同步
+
+### 相关提交
+- PR #340 main: \`1b9cb9c\`   
+- @mention 修复: \`3c176e9\`
+- 上游版本: https://github.com/m1heng/clawdbot-feishu/releases/tag/${upstreamTag}
+- PR #340: https://github.com/m1heng/clawdbot-feishu/pull/340`,
+              labels: ['sync-failed', 'conflict', 'help wanted']
+            });
+
+            console.log('Created issue for conflicts');
+
+      - name: Report status
+        if: always()
+        run: |
+          echo "=== Sync Status ==="
+          echo "Upstream tag: ${{ steps.find-tag.outputs.upstream_tag }}"
+          echo "Already exists: ${{ steps.find-tag.outputs.already_exists }}"
+          echo "PR #340 applied: ${{ steps.apply-pr.outputs.success }}"
+          echo "Main commit conflicts: ${{ steps.apply-pr.outputs.conflicts_1 }}"
+          echo "Fix commit conflicts: ${{ steps.apply-pr.outputs.conflicts_2 }}"
+          echo "Paused: ${{ steps.check-pause.outputs.paused }}"
