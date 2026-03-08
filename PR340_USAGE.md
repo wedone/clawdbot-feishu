@@ -83,7 +83,7 @@ openclaw plugins update feishu
         "accountId": "bot1",
         "peer": {
           "kind": "direct",
-          "id": "ou_user1"
+          "id": "<USER_ID_1>"
         }
       }
     },
@@ -105,7 +105,7 @@ openclaw plugins update feishu
         "accountId": "bot2",
         "peer": {
           "kind": "direct",
-          "id": "ou_user2"
+          "id": "<USER_ID_2>"
         }
       }
     },
@@ -157,7 +157,7 @@ openclaw plugins update feishu
 ```
 我来协调这个任务：
 
-1. 前端开发：<at user_id="ou_pao_pao_openid">泡泡</at> 请负责前端部分
+1. 前端开发：<at user_id="<BOT_OPENID_2>">泡泡</at> 请负责前端部分
 2. 后端开发：我来处理后端 API
 
 泡泡请评估一下前端工作量。
@@ -175,7 +175,7 @@ openclaw plugins update feishu
 1. 数据库查询可以加上索引
 2. 缓存策略需要调整
 
-<at user_id="ou_xia_zhu_openid">夏竹</at> 请确认这些改动的优先级。
+<at user_id="<BOT_OPENID_1>">夏竹</at> 请确认这些改动的优先级。
 ```
 
 夏竹收到触发后继续处理。
